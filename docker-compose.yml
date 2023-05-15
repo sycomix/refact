@@ -1,0 +1,19 @@
+version: "3.9"
+services:
+  refact_self_hosted:
+    image: smallcloud/refact_self_hosting:latest
+    volumes:
+      - workdir:/workdir
+    environment:
+      - SERVER_PORT=8008
+      - SERVER_WORKDIR=/workdir
+      - SERVER_MODEL=CONTRASTcode/medium/multi
+  nginx:
+    image: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  workdir:

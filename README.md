@@ -80,6 +80,14 @@ docker logs -f
 
 Choose model from available ones.
 
+### Running Server with docker-compose
+Run docker-compose with following command:
+```commandline
+curl -L https://github.com/smallcloudai/refact-self-hosting/raw/main/nginx.conf --output nginx.conf
+curl -L https://github.com/smallcloudai/refact-self-hosting/raw/main/docker-compose.yml --output docker-compose.yml
+docker-compose up
+```
+### Running Server with vanilla docker
 Run docker container with following command:
 ```commandline
 docker run --rm --gpus 0 -p 8008:8008 -v refact_workdir:/workdir --env SERVER_MODEL=<model name> smallcloud/refact_self_hosting
