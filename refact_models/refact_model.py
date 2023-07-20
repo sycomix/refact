@@ -46,7 +46,7 @@ class RefactModel(nn.Module, LoraMixin):
         model = cls(config, device)
         model.load_state_dict({
             _convert_weight_name(k): v.half()
-            for k, v in torch.load(f"{path}/mp_rank_00_model_states.pt")["module"].items()
+            for k, v in torch.load(f"{path}/mp_rank_00_model_states.pt", map_location=torch.device(device))["module"].items()
         })
 
         return model.half()
