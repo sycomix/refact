@@ -1,47 +1,27 @@
 import math
-from typing import List, Optional, Tuple, Union
-
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-import torch.nn.functional as F
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-
-from transformers.activations import ACT2FN
+from torch.nn import CrossEntropyLoss
 from transformers.modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
 )
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     logging,
 )
-from hf.configuration_gpt_refact import GPTRefactConfig
+from typing import List, Optional, Tuple, Union
 
+from hf.configuration_gpt_refact import GPTRefactConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "bigcode/gpt_bigcode-santacoder"
-_CONFIG_FOR_DOC = "GPTBigCodeConfig"
 
-GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bigcode/gpt_bigcode-santacoder",
-    # See all GPTBigCode models at https://huggingface.co/models?filter=gpt_bigcode
-]
-
-
-# Fused kernels
-# Use separate functions for each case because conditionals prevent kernel fusion.
-# TODO: Could have better fused kernels depending on scaling, dropout and head mask.
-#  Is it doable without writing 32 functions?
 @torch.jit.script
 def upcast_masked_softmax(
-    x: torch.Tensor, mask: torch.Tensor, mask_value: torch.Tensor, scale: float, softmax_dtype: torch.dtype
+        x: torch.Tensor, mask: torch.Tensor, mask_value: torch.Tensor, scale: float, softmax_dtype: torch.dtype
 ):
     input_dtype = x.dtype
     x = x.to(softmax_dtype) * scale
@@ -64,7 +44,8 @@ def masked_softmax(x: torch.Tensor, mask: torch.Tensor, mask_value: torch.Tensor
     x = torch.nn.functional.softmax(x, dim=-1)
     return x
 
-def _get_slopes(attn_heads: int, dev: str) -> torch.Tensor:
+@torch.jit.script
+def _get_slopes(attn_heads: int, dev: torch.device) -> torch.Tensor:
     """
     ## Get head-specific slope $m$ for each head
     * `n_heads` is the number of heads in the attention layer $n$
@@ -78,7 +59,7 @@ def _get_slopes(attn_heads: int, dev: str) -> torch.Tensor:
     # Get the closest power of 2 to `n_heads`.
     # If `n_heads` is not a power of 2, then we first calculate slopes to the closest (smaller) power of 2,
     # and then add the remaining slopes.
-    n = 2 ** math.floor(math.log2(attn_heads))
+    n = 2 ** math.floor(math.log(attn_heads, 2))
     # $2^{-\frac{8}{n}}$
     m_0 = 2.0 ** (-8.0 / n)
     # $2^{-1\frac{8}{n}}, 2^{-2 \frac{8}{n}}, 2^{-3 \frac{8}{n}}, \dots$
@@ -98,13 +79,13 @@ def _get_slopes(attn_heads: int, dev: str) -> torch.Tensor:
 
     return m
 
-
+@torch.jit.script
 def get_alibi_biases(
         B: int,
         T: int,
         attn_heads: int,
-        dev: str,
-        dtype,
+        dev: torch.device,
+        dtype: torch.dtype,
         causal: bool = True) -> torch.Tensor:
     """
     ## Calculate the attention biases matrix
@@ -134,12 +115,12 @@ def get_alibi_biases(
     biases = biases.repeat(B, 1, 1, 1)
     return biases.to(dtype).contiguous()
 
+
 class Attention(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.mask_value = None
 
-        self.multi_query = config.multi_query
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
@@ -156,7 +137,7 @@ class Attention(nn.Module):
         self.layer_idx = layer_idx
         self.attention_softmax_in_fp32 = config.attention_softmax_in_fp32
         self.scale_attention_softmax_in_fp32 = (
-            config.scale_attention_softmax_in_fp32 and config.attention_softmax_in_fp32
+                config.scale_attention_softmax_in_fp32 and config.attention_softmax_in_fp32
         )
 
         self.q = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
@@ -170,13 +151,9 @@ class Attention(nn.Module):
         upcast = dtype != softmax_dtype
         unscale = self.layer_idx + 1 if self.scale_attention_softmax_in_fp32 and upcast else 1
 
-        # MQA models: (batch_size, query_length, num_heads * head_dim)
-        # MHA models: (batch_size, num_heads, query_length, head_dim)
         attn_weights = alibi + torch.matmul(query * self.scale, key)
 
         if upcast:
-            # Use a fused kernel to prevent a large overhead from casting and scaling.
-            # Sub-optimal when the key length is not a multiple of 8.
             if attention_mask is None:
                 attn_weights = upcast_softmax(attn_weights, unscale, softmax_dtype)
             else:
@@ -184,8 +161,6 @@ class Attention(nn.Module):
                 attn_weights = upcast_masked_softmax(attn_weights, attention_mask, mask_value, unscale, softmax_dtype)
         else:
             if attention_mask is not None:
-
-                # The fused kernel is very slow when the key length is not a multiple of 8, so we skip fusion.
                 attn_weights = torch.masked_fill(attn_weights, attention_mask, -10000)
 
             attn_weights = torch.nn.functional.softmax(attn_weights, dim=-1)
@@ -200,15 +175,13 @@ class Attention(nn.Module):
         return tensor.permute(0, 2, 1, 3)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        layer_past: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        alibi: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
+            self,
+            hidden_states: torch.Tensor,
+            layer_past: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            alibi: Optional[torch.Tensor] = None,
+            use_cache: Optional[bool] = False,
+            output_attentions: Optional[bool] = False,
     ) -> Union[
         Tuple[torch.Tensor, Optional[torch.Tensor]],
         Tuple[torch.Tensor, Optional[torch.Tensor], Tuple[torch.Tensor, ...]],
@@ -272,6 +245,7 @@ class LayerNormNoBias(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return F.layer_norm(x, self.shape, self.weight, None, self.eps)
 
+
 class GPTRefactBlock(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
@@ -285,15 +259,13 @@ class GPTRefactBlock(nn.Module):
         self.mlp = MLP(self.inner_dim, config)
 
     def forward(
-        self,
-        hidden_states: Optional[Tuple[torch.Tensor]],
-        layer_past: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        alibi: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
+            self,
+            hidden_states: Optional[Tuple[torch.Tensor]],
+            layer_past: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            alibi: Optional[torch.Tensor] = None,
+            use_cache: Optional[bool] = False,
+            output_attentions: Optional[bool] = False,
     ) -> Union[
         Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
     ]:
@@ -325,11 +297,6 @@ class GPTRefactBlock(nn.Module):
 
 
 class GPTRefactPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = GPTRefactConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
@@ -340,7 +307,6 @@ class GPTRefactPreTrainedModel(PreTrainedModel):
         super().__init__(*inputs, **kwargs)
 
     def _init_weights(self, module):
-        """Initialize the weights."""
         if isinstance(module, (MLP, Attention)):
             # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
             #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
@@ -362,11 +328,9 @@ class GPTRefactPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
+        elif isinstance(module, LayerNormNoBias):
             module.weight.data.fill_(1.0)
 
-    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2PreTrainedModel._set_gradient_checkpointing with GPT2->GPTBigCode
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, GPTRefactModel):
             module.gradient_checkpointing = value
@@ -403,20 +367,15 @@ class GPTRefactModel(GPTRefactPreTrainedModel):
         return mask
 
     def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: Optional[torch.Tensor] = None,
+            past_key_values: Optional[List[torch.Tensor]] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            inputs_embeds: Optional[torch.Tensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -442,26 +401,11 @@ class GPTRefactModel(GPTRefactPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        if token_type_ids is not None:
-            token_type_ids = token_type_ids.view(-1, input_shape[-1])
-        if position_ids is not None:
-            position_ids = position_ids.view(-1, input_shape[-1])
-
         if past_key_values is None:
             past_length = 0
             past_key_values = tuple([None] * len(self.h))
         else:
             past_length = past_key_values[0][0].size(-2)
-
-        if attention_mask is not None and len(attention_mask.shape) == 2 and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_length > 0:
-                position_ids = position_ids[:, past_length : input_shape[-1] + past_length :]
-        elif position_ids is None:
-            position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
         # Self-attention mask.
         query_length = input_shape[-1]
@@ -476,10 +420,6 @@ class GPTRefactModel(GPTRefactPreTrainedModel):
 
         alibi = get_alibi_biases(hidden_states.shape[0], seq_length_with_past,
                                  self.num_heads, device, self.wte.weight.dtype)[:, :, -query_length:, :]
-
-        if token_type_ids is not None:
-            token_type_embeds = self.wte(token_type_ids)
-            hidden_states = hidden_states + token_type_embeds
 
         output_shape = input_shape + (hidden_states.size(-1),)
 
@@ -505,9 +445,7 @@ class GPTRefactModel(GPTRefactPreTrainedModel):
                     hidden_states,
                     None,
                     attention_mask,
-                    head_mask[i],
-                    encoder_hidden_states,
-                    encoder_attention_mask,
+                    alibi
                 )
             else:
                 outputs = block(
@@ -515,8 +453,6 @@ class GPTRefactModel(GPTRefactPreTrainedModel):
                     layer_past=layer_past,
                     attention_mask=attention_mask,
                     alibi=alibi,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                 )
@@ -550,21 +486,20 @@ class GPTRefactModel(GPTRefactPreTrainedModel):
             cross_attentions=all_cross_attentions,
         )
 
+
 class GPTRefactForCausalLM(GPTRefactPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight", "ln_f.weight"]
 
     def __init__(self, config):
         super().__init__(config)
         self.transformer = GPTRefactModel(config)
-        self.ln_f = nn.LayerNorm(self.transformer.embed_dim, eps=config.layer_norm_epsilon)
+        self.ln_f = LayerNormNoBias(self.transformer.embed_dim, eps=config.layer_norm_epsilon)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
@@ -582,21 +517,16 @@ class GPTRefactForCausalLM(GPTRefactPreTrainedModel):
         return model_inputs
 
     def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: Optional[torch.Tensor] = None,
+            past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            inputs_embeds: Optional[torch.Tensor] = None,
+            labels: Optional[torch.Tensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -610,12 +540,7 @@ class GPTRefactForCausalLM(GPTRefactPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -650,7 +575,7 @@ class GPTRefactForCausalLM(GPTRefactPreTrainedModel):
 
     @staticmethod
     def _reorder_cache(
-        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+            past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
     ) -> Tuple[Tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
