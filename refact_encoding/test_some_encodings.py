@@ -41,7 +41,7 @@ def test_rev50000_derivatives(enc_name):
     print("encode", toks)
     msg2 = enc.decode(toks)
     print("decode", msg2)
-    assert msg2 == msg + "<|endoftext|>"
+    assert msg2 == f"{msg}<|endoftext|>"
 
     test_long_text(enc)
     if enc_name == "openai_programming_v2":

@@ -46,12 +46,14 @@ class TabHostRouter(APIRouter):
         validated = post.dict()
         current_completion_model = validated.get("completion", "")
         if not current_completion_model or current_completion_model not in post.model_assign:
-            for info in _models()["models"]:
-                if info["has_completion"] and info["name"] in post.model_assign:
-                    validated["completion"] = info["name"]
-                    break
-            else:
-                validated["completion"] = ""
+            validated["completion"] = next(
+                (
+                    info["name"]
+                    for info in _models()["models"]
+                    if info["has_completion"] and info["name"] in post.model_assign
+                ),
+                "",
+            )
         models_to_watchdog_configs(validated)
         return JSONResponse("OK")
 
@@ -71,11 +73,11 @@ def _gpus(include_busy: bool = False):
 
 
 def _model_assignment():
-    if os.path.exists(env.CONFIG_INFERENCE):
-        j = json.load(open(env.CONFIG_INFERENCE, "r"))
-    else:
-        j = {"model_assign": {}}
-    return j
+    return (
+        json.load(open(env.CONFIG_INFERENCE, "r"))
+        if os.path.exists(env.CONFIG_INFERENCE)
+        else {"model_assign": {}}
+    )
 
 
 def _models():
@@ -94,13 +96,18 @@ def _models():
     for k, rec in models_mini_db.items():
         if rec.get("hidden", False):
             continue
-        models_info.append({
-            "name": k,
-            "has_completion": bool("completion" in rec["filter_caps"]),
-            "has_finetune": bool("finetune" in rec["filter_caps"]),
-            "has_toolbox": bool(toolbox_caps.intersection(rec["filter_caps"])),
-            "has_chat": bool(rec["chat_scratchpad_class"]) and bool(chat_caps.intersection(rec["filter_caps"])),
-        })
+        models_info.append(
+            {
+                "name": k,
+                "has_completion": "completion" in rec["filter_caps"],
+                "has_finetune": "finetune" in rec["filter_caps"],
+                "has_toolbox": bool(
+                    toolbox_caps.intersection(rec["filter_caps"])
+                ),
+                "has_chat": bool(rec["chat_scratchpad_class"])
+                and bool(chat_caps.intersection(rec["filter_caps"])),
+            }
+        )
     return {"models": models_info}
 
 
@@ -116,7 +123,7 @@ def models_to_watchdog_configs(inference_config=None):
     more_models_than_gpus = False
     for k, assrec in model_assignment.items():
         if k not in models_mini_db.keys():
-            log("unknown model '%s', skipping" % k)
+            log(f"unknown model '{k}', skipping")
             continue
         if assrec["gpus_shard"] not in [1, 2, 4]:
             log("invalid shard count %d, skipping %s" % (assrec["gpus_shard"], k))
@@ -125,7 +132,7 @@ def models_to_watchdog_configs(inference_config=None):
         if cursor + assrec["gpus_shard"] > len(gpus):
             more_models_than_gpus = True
             break
-        cfg_out = "model-%s.cfg" % k.lower().replace("/", "-")
+        cfg_out = f'model-{k.lower().replace("/", "-")}.cfg'
         allowed_to_exist.append(cfg_out)
         with open(os.path.join(env.DIR_WATCHDOG_D, cfg_out), "w") as f:
             model_cfg_j = copy.deepcopy(model_cfg_template)
@@ -157,9 +164,9 @@ def models_to_watchdog_configs(inference_config=None):
         cfg.pop('unfinished')
         cfg['command_line'].append('--openai_key')
         cfg['command_line'].append(openai_api_key)
-        with open(openai_watchdog_cfg_fn + ".tmp", "w") as f:
+        with open(f"{openai_watchdog_cfg_fn}.tmp", "w") as f:
             json.dump(cfg, f, indent=4)
-        os.rename(openai_watchdog_cfg_fn + ".tmp", openai_watchdog_cfg_fn)
+        os.rename(f"{openai_watchdog_cfg_fn}.tmp", openai_watchdog_cfg_fn)
     else:
         try:
             os.unlink(openai_watchdog_cfg_fn)

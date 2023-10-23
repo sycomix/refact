@@ -9,20 +9,20 @@ from typing import List
 
 def postprocess(text: str, language: str):
     cutted = []
-    if language in ["python"]:
+    if language in {"python"}:
         for x in text.split("\n"):
             if x.startswith(" ") or x.strip() == "":
                 cutted.append(x)
             elif not x.startswith(" "):
                 break
-    elif language in ["cpp", "go", "js"]:
+    elif language in {"cpp", "go", "js"}:
         for x in text.split("\n"):
             cutted.append(x)
             if x.startswith("}"):
                 break
         else:
             cutted.append("}")
-    elif language in ["java"]:
+    elif language in {"java"}:
         for x in text.split("\n"):
             cutted.append(x)
             if x.startswith("    }"):
@@ -49,11 +49,10 @@ class HumanEvalXContinuation:
         txt = self.enc.decode(tokens_with_completion, cut_at_eot=True)
         assert txt.startswith(prompt)
         completion = postprocess(txt[len(prompt):], self.language)
-        ret = {
+        return {
             "completion": completion,
             "tokens_with_completion": [int(t) for t in tokens_with_completion],
         }
-        return ret
 
     def __iter__(self):
         for ex in self.inner_filter:

@@ -14,11 +14,7 @@ def inject_to_module(
 ):
     sub_paths = inject_path.split('.')
     for p in sub_paths[:-1]:
-        if p.isnumeric():
-            base_module = base_module[int(p)]
-        else:
-            base_module = getattr(base_module, p)
-
+        base_module = base_module[int(p)] if p.isnumeric() else getattr(base_module, p)
     if sub_paths[-1].isnumeric():
         base_module[int(sub_paths[-1])] = injecting_module
     else:
@@ -87,12 +83,10 @@ class LoraLinear(LoraLayerMixin, th.nn.Module):
         return self.layer.bias
 
     def forward(self, x: th.Tensor) -> th.Tensor:
-        if self.r > 0:
-            result1 = self.layer(x)
-            result2 = result1 + self.lora_B(self.lora_A(self.lora_dropout(x))) * self.scaling
-            return result2
-        else:
+        if self.r <= 0:
             return self.layer(x)
+        result1 = self.layer(x)
+        return result1 + self.lora_B(self.lora_A(self.lora_dropout(x))) * self.scaling
 
 
 class LoraMixin:

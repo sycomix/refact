@@ -22,9 +22,7 @@ urls_switch_ts = time.time()
 def infserver_session() -> requests.Session:
     bearer = os.environ.get("SMALLCLOUD_API_KEY", "EMPTY")
     s = requests.Session()
-    s.headers.update({
-        "Authorization": "Bearer %s" % bearer,
-    })
+    s.headers.update({"Authorization": f"Bearer {bearer}"})
     return s
 
 
@@ -70,9 +68,9 @@ def validate_description_dict(
 def completions_wait_batch(req_session, my_desc, verbose=False):
     resp = None
     json_resp = None
-    for attempt in range(5):
+    for _ in range(5):
         t0 = time.time()
-        url = url_get_the_best() + "completions-wait-batch"
+        url = f"{url_get_the_best()}completions-wait-batch"
         try:
             resp = req_session.post(url, json=my_desc, timeout=15)
             json_resp = resp.json()
@@ -251,7 +249,9 @@ def _upload_results_loop(upload_q: multiprocessing.Queue, cancelled_q: multiproc
         try:
             upload_dict = upload_q.get(timeout=600)
         except queue.Empty as e:
-            logger.warning("%s %s" % (datetime.datetime.now().strftime("%H:%M:%S.%f"), termcolor.colored("upload_results_loop timeout, exiting", "red")))
+            logger.warning(
+                f'{datetime.datetime.now().strftime("%H:%M:%S.%f")} {termcolor.colored("upload_results_loop timeout, exiting", "red")}'
+            )
             exit_flag = True
             continue
         if "exit" in upload_dict:
@@ -266,12 +266,11 @@ def _upload_results_loop(upload_q: multiprocessing.Queue, cancelled_q: multiproc
                 break
             maybe_pile_up = upload_q.get() if not upload_q.empty() else None
             if maybe_pile_up is None:
-                if time.time() < t1 + 0.3:
-                    # Normally send every ~0.5 seconds
-                    time.sleep(0.1)
-                    continue
-                else:
+                if time.time() >= t1 + 0.3:
                     break
+                # Normally send every ~0.5 seconds
+                time.sleep(0.1)
+                continue
             if "exit" in maybe_pile_up:
                 exit_flag = True
             if "progress" in maybe_pile_up:
@@ -305,7 +304,7 @@ def _upload_results_loop(upload_q: multiprocessing.Queue, cancelled_q: multiproc
         for _attempt in range(5):
             j = dict()
             try:
-                url = url_get_the_best() + "completion-upload-results"
+                url = f"{url_get_the_best()}completion-upload-results"
                 resp = req_session.post(url, json=upload_dict, timeout=2)
                 j = resp.json()
             except requests.exceptions.ReadTimeout as e:

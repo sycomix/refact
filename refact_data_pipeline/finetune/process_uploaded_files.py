@@ -56,9 +56,9 @@ def log(*args):
 
 
 def stats_save():
-    with open(env.CONFIG_PROCESSING_STATS + ".tmp", "w") as f:
+    with open(f"{env.CONFIG_PROCESSING_STATS}.tmp", "w") as f:
         f.write(json.dumps(stats_json, indent=4))
-    os.rename(env.CONFIG_PROCESSING_STATS + ".tmp", env.CONFIG_PROCESSING_STATS)
+    os.rename(f"{env.CONFIG_PROCESSING_STATS}.tmp", env.CONFIG_PROCESSING_STATS)
 
 
 class LinguistProcess:
@@ -128,8 +128,7 @@ def ls_with_linguist(start_dir):
 
     num_processes = max(1, multiprocessing.cpu_count() // 2)
     linguist = LinguistProcessPool(num_processes)
-    for result in linguist.feed_files(filenames_g(start_dir)):
-        yield result
+    yield from linguist.feed_files(filenames_g(start_dir))
 
 
 def get_source_type(filename: str) -> str:
@@ -276,7 +275,7 @@ def prepare_and_copy(stats_json, upload_dir: str, unpack_dir: str):
             try:
                 need_force_rescan = _prepare_git_repo(upload_filename)
             except Exception as e:
-                log("ERROR: %s" % (e or str(type(e))))
+                log(f"ERROR: {e or str(type(e))}")
                 msg = str(e)
                 success = False
         if success:
@@ -292,8 +291,8 @@ def prepare_and_copy(stats_json, upload_dir: str, unpack_dir: str):
             src_mtime = os.path.getmtime(upload_filename)
             ff_mtime = os.path.exists(files_found_jsonl) and os.path.getmtime(files_found_jsonl)
             if not ff_mtime or src_mtime > ff_mtime or need_force_rescan:
-                log("mtime of %s = %s" % (upload_filename, time.ctime(src_mtime)))
-                log("mtime of %s = %s" % (files_found_jsonl, time.ctime(ff_mtime)))
+                log(f"mtime of {upload_filename} = {time.ctime(src_mtime)}")
+                log(f"mtime of {files_found_jsonl} = {time.ctime(ff_mtime)}")
                 log(f"{filename} needs update => copy, unpack, find files")
             else:
                 extracted_files = list(jsonlines.open(files_found_jsonl))
@@ -321,7 +320,7 @@ def prepare_and_copy(stats_json, upload_dir: str, unpack_dir: str):
                     mark_which_set(extracted_files, filename)
                     huge_list.extend(extracted_files)
             except BaseException as e:
-                log("ERROR: %s" % (e or str(type(e))))
+                log(f"ERROR: {e or str(type(e))}")
                 raise
         stats_json["uploaded_files"][filename]["status"] = "completed" if success else "failed"
         if msg is not None:
@@ -385,7 +384,7 @@ def list_of_files_to_stats(files):
     for i, x in enumerate(files):
         if "error" in x:
             stat_error += 1
-            log("Error: %s" % x["error"])
+            log(f'Error: {x["error"]}')
             continue
         if x["large"]:
             stat_large += 1
@@ -425,8 +424,7 @@ def dedup(huge_list):
         path = x["path"]
         name = os.path.basename(path)
         namesize = "%s:%i" % (name, x["lines"] // 10)
-        dup = unique_by_namesize.get(namesize)
-        if dup:
+        if dup := unique_by_namesize.get(namesize):
             is_test = dup["which_set"] == "test" or x["which_set"] == "test"
             is_train = dup["which_set"] == "train" or x["which_set"] == "train"
             which_set = x["which_set"]
@@ -461,9 +459,7 @@ def make_matcher(raw_masks: str):
     masks = [cleanup_mask(m) for m in raw_masks.split(',')]
 
     def matcher(source: str):
-        if len(masks) > 0:
-            return any([fnmatch(source, m) for m in masks])
-        return None
+        return any(fnmatch(source, m) for m in masks) if masks else None
 
     return matcher, len(masks) > 0
 
@@ -531,7 +527,7 @@ def save_into_sets(records: List[Dict[str, Any]], dups):
         with open(env.CONFIG_HOW_TO_FILETYPES, "w") as f:
             json.dump(fcfg, f, indent=4)
 
-    log("Reading %s" % env.CONFIG_HOW_TO_FILETYPES)
+    log(f"Reading {env.CONFIG_HOW_TO_FILETYPES}")
     with open(env.CONFIG_HOW_TO_FILETYPES, "r") as f:
         fcfg = json.load(f)
 
@@ -611,14 +607,13 @@ def save_into_sets(records: List[Dict[str, Any]], dups):
 
 def save_jsonl_if_changed(fn, a_list):
     new_text = "".join((json.dumps(x) + "\n") for x in a_list)
-    if os.path.isfile(fn):
-        old_text = open(fn).read()
-    else:
-        old_text = "does not exist"
+    old_text = open(fn).read() if os.path.isfile(fn) else "does not exist"
     if old_text == new_text:
-        log("Will not overwrite '%s' because it is exactly the same as the current output" % fn)
+        log(
+            f"Will not overwrite '{fn}' because it is exactly the same as the current output"
+        )
         return
-    log("Writing '%s'" % fn)
+    log(f"Writing '{fn}'")
     with open(fn, "w") as f:
         f.write(new_text)
 
@@ -662,7 +657,6 @@ if __name__ == '__main__':
         format='%(asctime)s PREPROC %(message)s',
         datefmt='%Y%m%d %H:%M:%S',
         handlers=[logging.StreamHandler(stream=sys.stderr)])
-    YMD_hms = os.environ.get("LORA_LOGDIR", "")
-    if YMD_hms:
+    if YMD_hms := os.environ.get("LORA_LOGDIR", ""):
         traces.configure(task_dir="loras", task_name=YMD_hms, work_dir=env.PERMDIR)
     main()

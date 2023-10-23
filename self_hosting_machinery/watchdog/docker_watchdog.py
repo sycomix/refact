@@ -15,7 +15,7 @@ def replace_variable_names_from_env(s):
     s = s.replace("%PYTHON%", sys.executable)
     for k, v in env.__dict__.items():
         if k.startswith("FLAG_") or k.startswith("DIR_") or k.startswith("CONFIG_"):
-            s = s.replace("%" + k + "%", v)
+            s = s.replace(f"%{k}%", v)
     return s
 
 
@@ -24,7 +24,7 @@ def log(*args):
     sys.stderr.write(msg + "\n")
     sys.stderr.flush()
     date = time.strftime("%Y%m%d")
-    with open(os.path.join(env.DIR_LOGS, "watchdog_%s.log" % date), "a") as f:
+    with open(os.path.join(env.DIR_LOGS, f"watchdog_{date}.log"), "a") as f:
         f.write(msg + "\n")
 
 
@@ -78,8 +78,9 @@ class TrackedJob:
             self.p.pid,
         ))
         os.set_blocking(self.p.stderr.fileno(), False)
-        interrupt_when_file_appears = self.cfg.get("interrupt_when_file_appears", "")
-        if interrupt_when_file_appears:
+        if interrupt_when_file_appears := self.cfg.get(
+            "interrupt_when_file_appears", ""
+        ):
             p = replace_variable_names_from_env(interrupt_when_file_appears)
             if os.path.exists(p):
                 os.unlink(p)
@@ -93,24 +94,23 @@ class TrackedJob:
             if not line:
                 break
             line = line.decode("utf-8").rstrip()
-            garbage = False
-            for test in [
-                "Loading extension module",
-                "Building extension module",
-                "ninja",
-                "Detected CUDA files",
-                "skipping build step",
-                "PyTorch extensions root",
-                "RequestsDependencyWarning",
-                "warnings.warn(\"urllib3",
-                "Positional args are being",
-                "warnings.warn",
-            ]:
-                if test in line:
-                    garbage = True
-                    break
+            garbage = any(
+                test in line
+                for test in [
+                    "Loading extension module",
+                    "Building extension module",
+                    "ninja",
+                    "Detected CUDA files",
+                    "skipping build step",
+                    "PyTorch extensions root",
+                    "RequestsDependencyWarning",
+                    "warnings.warn(\"urllib3",
+                    "Positional args are being",
+                    "warnings.warn",
+                ]
+            )
             if not garbage:
-                log("-- %s -- %s" % (self.p.pid, line))
+                log(f"-- {self.p.pid} -- {line}")
             if " STATUS " in line:
                 cut_here = line.index(" STATUS ") + len(" STATUS ")
                 self.status_from_stderr = line[cut_here:].strip()
@@ -138,8 +138,7 @@ class TrackedJob:
     def maybe_needs_stop(self):
         if not self.p:
             return
-        restart_every = self.cfg.get("restart_every", 0)
-        if restart_every:
+        if restart_every := self.cfg.get("restart_every", 0):
             now = time.time()
             if now - self.start_ts > restart_every:
                 self.please_shutdown = True
@@ -149,8 +148,9 @@ class TrackedJob:
             p = replace_variable_names_from_env(self.cfg["when_file_appears"])
             if os.path.exists(p):
                 os.unlink(p)
-        interrupt_when_file_appears = self.cfg.get("interrupt_when_file_appears", "")
-        if interrupt_when_file_appears:
+        if interrupt_when_file_appears := self.cfg.get(
+            "interrupt_when_file_appears", ""
+        ):
             p = replace_variable_names_from_env(interrupt_when_file_appears)
             if os.path.exists(p):
                 self.please_shutdown = True
@@ -164,7 +164,9 @@ class TrackedJob:
             self.p.send_signal(signal.SIGUSR1)
             self.sent_sigusr1_ts = time.time()
         if self.please_shutdown and self.sent_sigusr1_ts > time.time() + 30:
-            log("%s SIGUSR1 timed out, sending kill %s" % (time.strftime("%Y%m%d %H:%M:%S"), self.p.pid))
+            log(
+                f'{time.strftime("%Y%m%d %H:%M:%S")} SIGUSR1 timed out, sending kill {self.p.pid}'
+            )
             self.p.kill()
 
     def maybe_can_start(self):
@@ -179,17 +181,14 @@ class TrackedJob:
         if "when_file_appears" in policy:
             the_file = replace_variable_names_from_env(self.cfg["when_file_appears"])
             if os.path.exists(the_file):
-                can_start = preempt_low_priority(self.cfg.get("gpus", []))
-                if can_start:
+                if can_start := preempt_low_priority(self.cfg.get("gpus", [])):
                     os.remove(the_file)
                     self._start()
         elif "always_on" in policy:
-            can_start = preempt_low_priority(self.cfg.get("gpus", []))
-            if can_start:
+            if can_start := preempt_low_priority(self.cfg.get("gpus", [])):
                 self._start()
         elif "always_on_low_priority" in policy:
-            can_start = low_priority_can_start(self.cfg.get("gpus", []))
-            if can_start:
+            if can_start := low_priority_can_start(self.cfg.get("gpus", [])):
                 self._start()
         elif "at_night" in policy:
             pass
@@ -218,12 +217,14 @@ def create_tracked_jobs_from_configs():
         if fn in tracked:
             tracked[fn].cfg = cfg
             if tracked[fn].cmdline_str != cfg_to_cmdline(cfg) and not tracked[fn].remove_this:
-                log("%s command line changed, stop job %s" % (time.strftime("%Y%m%d %H:%M:%S"), tracked[fn].cmdline_str))
+                log(
+                    f'{time.strftime("%Y%m%d %H:%M:%S")} command line changed, stop job {tracked[fn].cmdline_str}'
+                )
                 tracked[fn].please_shutdown = True
                 tracked[fn].remove_this = True
         else:
             tracked[fn] = TrackedJob(cfg)
-            log("%s adding job %s" % (time.strftime("%Y%m%d %H:%M:%S"), fn))
+            log(f'{time.strftime("%Y%m%d %H:%M:%S")} adding job {fn}')
         now_missing.discard(fn)
     for fn in now_missing:
         tracked[fn].please_shutdown = True
@@ -239,7 +240,9 @@ def preempt_low_priority(gpus):
             if job.p is not None:
                 can_start = False
             if not job.please_shutdown:
-                log("%s shutdown low priority job %s" % (time.strftime("%Y%m%d %H:%M:%S"), job.cmdline_str))
+                log(
+                    f'{time.strftime("%Y%m%d %H:%M:%S")} shutdown low priority job {job.cmdline_str}'
+                )
                 job.please_shutdown = True
     return can_start
 
@@ -279,9 +282,9 @@ def inform_about_gpu_status():
         }
     s = json.dumps(j, indent=4) + "\n"
     if s != _inform_about_gpu_status:
-        with open(env.CONFIG_BUSY_GPUS + ".tmp", "w") as f:
+        with open(f"{env.CONFIG_BUSY_GPUS}.tmp", "w") as f:
             f.write(s)
-        os.rename(env.CONFIG_BUSY_GPUS + ".tmp", env.CONFIG_BUSY_GPUS)
+        os.rename(f"{env.CONFIG_BUSY_GPUS}.tmp", env.CONFIG_BUSY_GPUS)
         _inform_about_gpu_status = s
 
 
@@ -295,7 +298,7 @@ def main_loop():
             job.maybe_send_usr1()
             dead = job._poll_logs()
             if dead and job.remove_this:
-                log("%s cleanup %s" % (time.strftime("%Y%m%d %H:%M:%S"), fn))
+                log(f'{time.strftime("%Y%m%d %H:%M:%S")} cleanup {fn}')
                 del tracked[fn]
                 break
         inform_about_gpu_status()

@@ -54,10 +54,8 @@ def masked_loss(
         import termcolor
         def token_str(x, cond, color):
             t = "\"" + enc.decode([x]).replace("\n", "\\n") + "\""
-            if cond:
-                return termcolor.colored(t, color)
-            else:
-                return t
+            return termcolor.colored(t, color) if cond else t
+
         with th.no_grad():
             b = 0
             for ti in range(T):
@@ -75,7 +73,7 @@ def masked_loss(
                     "modelthinks=%-10s" % token_str(largest_logit_n, (mask[b, ti].item() and labels[b, ti].item() != largest_logit_n), "red"),
                 ]))
         debug_dump.append("-- (ce * mask).sum(dim=1) = %s" % (ce * mask).sum(dim=1))
-        debug_dump.append("-- avg_mask_sum = %s" % avg_mask_sum)
+        debug_dump.append(f"-- avg_mask_sum = {avg_mask_sum}")
         debug_dump.append("-- this example loss_ce = %5.3f" % loss_ce.item())
 
     return loss_ce
@@ -86,9 +84,8 @@ def freeze_model(
         freeze_exceptions: List[str]
 ) -> th.nn.Module:
     for name, p in model.named_parameters():
-        if any([e in name for e in freeze_exceptions]):
-            continue
-        p.requires_grad_(False)
+        if all(e not in name for e in freeze_exceptions):
+            p.requires_grad_(False)
     return model
 
 
@@ -115,10 +112,9 @@ def apply_flash_attention(model):
 
     if type(model) != CodifyModel:
         raise NotImplementedError()
-    else:
-        for block in model.blocks:
-            block.sa.forward = _forward.__get__(block.sa, type(block.sa))
-        return model
+    for block in model.blocks:
+        block.sa.forward = _forward.__get__(block.sa, type(block.sa))
+    return model
 
 
 def lora_state_dict(model, *args, destination=None, prefix='', keep_vars=False, layer_names):
@@ -170,10 +166,10 @@ def make_model(
     model = model.apply_lora(
         model.to(device),
         lora_target_modules=lora_target_modules,
-        lora_r=int(lora_r),
+        lora_r=lora_r,
         lora_alpha=lora_alpha,
         lora_dropout=lora_dropout,
-        lora_init_scale=lora_init_scale
+        lora_init_scale=lora_init_scale,
     )
     if th.cuda.get_device_capability() >= (8, 0):
         model = apply_flash_attention(model)

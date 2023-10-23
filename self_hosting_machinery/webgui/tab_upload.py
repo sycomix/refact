@@ -27,8 +27,7 @@ async def download_file_from_url(url: str):
                     status_code=500,
                     detail=f"Cannot download: {response.reason} {response.status}",
                 )
-            file = await response.read()
-            return file
+            return await response.read()
 
 
 class UploadViaURL(BaseModel):
@@ -91,8 +90,8 @@ class TabUploadRouter(APIRouter):
             mtime = os.path.getmtime(env.CONFIG_PROCESSING_STATS)
             stats_uploaded_files = scan_stats.get("uploaded_files", {})
             for fstat in stats_uploaded_files.values():
-                if fstat["status"] in ["working", "starting"]:
-                    if mtime + 600 < time.time():
+                if mtime + 600 < time.time():
+                    if fstat["status"] in ["working", "starting"]:
                         fstat["status"] = "failed"
 
         if os.path.isfile(env.CONFIG_HOW_TO_FILETYPES):
@@ -138,17 +137,17 @@ class TabUploadRouter(APIRouter):
         return Response(json.dumps(result, indent=4) + "\n")
 
     async def _tab_files_save_config(self, config: TabFilesConfig):
-        with open(env.CONFIG_HOW_TO_UNZIP + ".tmp", "w") as f:
+        with open(f"{env.CONFIG_HOW_TO_UNZIP}.tmp", "w") as f:
             json.dump(config.dict(), f, indent=4)
-        os.rename(env.CONFIG_HOW_TO_UNZIP + ".tmp", env.CONFIG_HOW_TO_UNZIP)
+        os.rename(f"{env.CONFIG_HOW_TO_UNZIP}.tmp", env.CONFIG_HOW_TO_UNZIP)
         # _reset_process_stats()  -- this requires process script restart, but it flashes too much in GUI
         return JSONResponse("OK")
 
     async def _tab_files_upload(self, file: UploadFile):
-        tmp_path = os.path.join(env.DIR_UPLOADS, file.filename + ".tmp")
+        tmp_path = os.path.join(env.DIR_UPLOADS, f"{file.filename}.tmp")
         file_path = os.path.join(env.DIR_UPLOADS, file.filename)
         if os.path.exists(file_path):
-            response_data = {"message": f"File with this name already exists"}
+            response_data = {"message": "File with this name already exists"}
             return JSONResponse(content=response_data, status_code=409)
         try:
             with open(tmp_path, "wb") as f:
@@ -159,7 +158,7 @@ class TabUploadRouter(APIRouter):
                     f.write(contents)
             os.rename(tmp_path, file_path)
         except OSError as e:
-            log("Error while uploading file: %s" % (e or str(type(e))))
+            log(f"Error while uploading file: {e or str(type(e))}")
             return JSONResponse({"message": "Cannot upload file, see logs for details"}, status_code=500)
         finally:
             if os.path.exists(tmp_path):
@@ -188,6 +187,7 @@ class TabUploadRouter(APIRouter):
         return ' '.join(command)
 
     async def _tab_files_repo_upload(self, repo: CloneRepo):
+
         class IncorrectUrl(Exception):
             def __init__(self):
                 super().__init__()
@@ -198,6 +198,7 @@ class TabUploadRouter(APIRouter):
                     raise IncorrectUrl()
                 url = splited[0]
             return url
+
         def check_url(url: str):
             from giturlparse import parse
             if not parse(url).valid:
@@ -205,8 +206,7 @@ class TabUploadRouter(APIRouter):
             return url
 
         def get_repo_name_from_url(url: str) -> str:
-            if url.endswith('/'):
-                url = url[:-1]
+            url = url.removesuffix('/')
             last_slash_index = url.rfind("/")
             last_suffix_index = url.rfind(".git")
             if last_suffix_index < 0:
@@ -216,6 +216,7 @@ class TabUploadRouter(APIRouter):
                 raise Exception("Badly formatted url {}".format(url))
 
             return url[last_slash_index + 1:last_suffix_index]
+
         try:
             url = cleanup_url(repo.url)
             url = check_url(url)
@@ -230,7 +231,7 @@ class TabUploadRouter(APIRouter):
         except FileExistsError as _:
             return JSONResponse({"message": f"Error: {repo_name} exists"}, status_code=500)
         except IncorrectUrl:
-            return JSONResponse({"message": f"Error: incorrect url"}, status_code=500)
+            return JSONResponse({"message": "Error: incorrect url"}, status_code=500)
         except Exception as e:
             return JSONResponse({"message": f"Error: {e}"}, status_code=500)
         _reset_process_stats()
@@ -257,15 +258,15 @@ class TabUploadRouter(APIRouter):
     async def _tab_files_log(self, phase: str, accepted_or_rejected: str):
         fn = ""
         if phase == "finetune_filter":
-            if accepted_or_rejected == "accepted":
-                fn = env.LOG_FILES_ACCEPTED_FTF
-            else:
-                fn = env.LOG_FILES_REJECTED_FTF
+            fn = (
+                env.LOG_FILES_ACCEPTED_FTF
+                if accepted_or_rejected == "accepted"
+                else env.LOG_FILES_REJECTED_FTF
+            )
+        elif accepted_or_rejected == "accepted":
+            fn = env.LOG_FILES_ACCEPTED_SCAN
         else:
-            if accepted_or_rejected == "accepted":
-                fn = env.LOG_FILES_ACCEPTED_SCAN
-            else:
-                fn = env.LOG_FILES_REJECTED_SCAN
+            fn = env.LOG_FILES_REJECTED_SCAN
         if os.path.isfile(fn):
             return StreamingResponse(
                 stream_text_file(fn),
@@ -275,9 +276,9 @@ class TabUploadRouter(APIRouter):
             return Response("File list empty\n", media_type="text/plain")
 
     async def _tab_files_filetypes_setup(self, post: FileTypesSetup):
-        with open(env.CONFIG_HOW_TO_FILETYPES + ".tmp", "w") as f:
+        with open(f"{env.CONFIG_HOW_TO_FILETYPES}.tmp", "w") as f:
             json.dump(post.dict(), f, indent=4)
-        os.rename(env.CONFIG_HOW_TO_FILETYPES + ".tmp", env.CONFIG_HOW_TO_FILETYPES)
+        os.rename(f"{env.CONFIG_HOW_TO_FILETYPES}.tmp", env.CONFIG_HOW_TO_FILETYPES)
         _start_process_now(dont_delete_stats=True)
         return JSONResponse("OK")
 
@@ -303,7 +304,7 @@ def _reset_process_stats():
 async def stream_text_file(fn):
     f = open(fn, "r")
     while True:
-        line = f.readline()
-        if not line:
+        if line := f.readline():
+            yield line
+        else:
             break
-        yield line

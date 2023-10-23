@@ -99,10 +99,7 @@ def _fwd_kernel(
         begin_m = 0
     else:
         end_n = tl.minimum((start_m + 1) * BLOCK_M, seq_len)
-        if HAS_REACH:
-            begin_m = tl.maximum(0, end_n - ((REACH + 1) * BLOCK_M))
-        else:
-            begin_m = 0
+        begin_m = tl.maximum(0, end_n - ((REACH + 1) * BLOCK_M)) if HAS_REACH else 0
     for start_n in range(begin_m, end_n, BLOCK_N):
         # -- compute qk ----
         if EVEN_HEADDIM:
@@ -293,22 +290,21 @@ def _bwd_kernel_one_col_block(
         dk += tl.dot(tl.trans(ds), q)
         # compute dq
         # tl.debug_barrier()
-        if not ATOMIC_ADD:
-            if EVEN_HEADDIM:
-                dq = tl.load(dq_ptrs)
-                dq += tl.dot(ds, k)
-                tl.store(dq_ptrs, dq)
-            else:
-                dq = tl.load(dq_ptrs, mask=offs_d[None, :] < HEAD_DIM, other=0.0)
-                dq += tl.dot(ds, k)
-                tl.store(dq_ptrs, dq, mask=offs_d[None, :] < HEAD_DIM)
-        else:
+        if ATOMIC_ADD:
             if EVEN_HEADDIM:
                 dq = tl.dot(ds, k)
                 tl.atomic_add(dq_ptrs, dq)
             else:
                 dq = tl.dot(ds, k)
                 tl.atomic_add(dq_ptrs, dq, mask=offs_d[None, :] < HEAD_DIM)
+        elif EVEN_HEADDIM:
+            dq = tl.load(dq_ptrs)
+            dq += tl.dot(ds, k)
+            tl.store(dq_ptrs, dq)
+        else:
+            dq = tl.load(dq_ptrs, mask=offs_d[None, :] < HEAD_DIM, other=0.0)
+            dq += tl.dot(ds, k)
+            tl.store(dq_ptrs, dq, mask=offs_d[None, :] < HEAD_DIM)
         # increment pointers
         dq_ptrs += BLOCK_M * stride_dqm
         q_ptrs += BLOCK_M * stride_qm
@@ -424,16 +420,17 @@ def _flash_attn_forward(
     assert q.dtype == k.dtype == v.dtype, 'All tensors must have the same type'
     assert q.dtype in [th.float16, th.bfloat16], 'Only support fp16 and bf16'
     assert q.is_cuda and k.is_cuda and v.is_cuda
-    assert not (
-            reach is not None and not causal), 'FlashAttention does not support reach and non causal at the same time'
+    assert (
+        reach is None or causal
+    ), 'FlashAttention does not support reach and non causal at the same time'
 
     l = th.empty((batch, nheads, seqlen), device=q.device, dtype=th.float32)
     o = th.empty_like(q)
     alibi_slope = _get_alibi_slopes(attn_heads=nheads, dev=q.device) if fused_alibi_bias else None
 
     BLOCK_HEADDIM = max(triton.next_power_of_2(d), 16)
-    BLOCK = 128
     num_warps = 4 if d <= 64 else 8
+    BLOCK = 128
     _fwd_kernel[(triton.cdiv(seqlen, BLOCK), batch * nheads)](
         q, k, v, alibi_slope,
         o, l,

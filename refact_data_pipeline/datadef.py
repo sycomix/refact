@@ -32,10 +32,7 @@ class DatasetOpts:
         if len(s):
             for t in s.split(","):
                 k, v = t.split("=")
-                if "." in v:
-                    self.opts[k] = float(v)
-                else:
-                    self.opts[k] = int(v)
+                self.opts[k] = float(v) if "." in v else int(v)
         self.used = set()
         self.encoding = None
 
@@ -55,7 +52,9 @@ class DatasetOpts:
 
     def assert_all_used(self):
         unused = set(self.opts.keys()) - self.used
-        assert not unused, "DatasetOpts has unused data processing options %s" % str(unused)
+        assert (
+            not unused
+        ), f"DatasetOpts has unused data processing options {str(unused)}"
 
     def __repr__(self):
         return json.dumps(self.opts)

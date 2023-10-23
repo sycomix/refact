@@ -115,10 +115,9 @@ def local_sequence_plain_infill(fn_set_jsonl, dataopts):
     ds1 = local_plain(fn_set_jsonl, dataopts)
     ds2 = local_infill(fn_set_jsonl, dataopts)
     def _iter():
-        for ex1 in ds1:
-            yield ex1
-        for ex2 in ds2:
-            yield ex2
+        yield from ds1
+        yield from ds2
+
     return _iter()
 
 

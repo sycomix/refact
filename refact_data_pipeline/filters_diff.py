@@ -43,7 +43,7 @@ class ContrastFromODM:
                     stats["diffskip_toobig"] += 1
                     continue
                 except Exception as e:
-                    print(str(odm))
+                    print(odm)
                     print(traceback.format_exc())
                     stats["diffskip_selftest"] += 1
                     continue
@@ -89,14 +89,13 @@ class ContrastFromODM:
             assert len(diff.r) == len(diff.m)
             assert len(diff.r) == len(edit_classes)
             assert len(diff.r) == len(hlpoint)
-            emit = {
+            yield {
                 "tokens": diff.r,
                 "mask": diff.m,
                 "first": first,
                 "diffhlpoint": hlpoint,
                 "diffedits": edit_classes,
                 # "diffshifts": edit_shifts,
-                "stats": {**odm["stats"], **stats}
+                "stats": {**odm["stats"], **stats},
             }
-            yield emit
 

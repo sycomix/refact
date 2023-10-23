@@ -61,9 +61,7 @@ class InfillDiff:
                         cut1pos = self.py_random.randint(0, len(first_line))
                     if self.py_random.randint(0, 1):
                         cut1pos = 0
-                    part1 = ""
-                    for x in code_rows[:cut1line]:
-                        part1 += x + "\n"
+                    part1 = "".join(x + "\n" for x in code_rows[:cut1line])
                     part1 += code_rows[cut1line][:cut1pos]
                     if cutlines == 0:
                         cut2pos = self.py_random.randint(cut1pos + 1, len(first_line))
@@ -113,7 +111,7 @@ class InfillDiff:
                     diff.write_edits()
 
                 except Exception as e:
-                    print(str(odm))
+                    print(odm)
                     print(traceback.format_exc())
                     continue
                 edits_within_context = self.n_ctx - diff.offset_edits

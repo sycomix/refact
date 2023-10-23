@@ -84,6 +84,7 @@ def ops_stochastic_expand(
             return np.random.poisson(lam=2)
         else:
             return np_random.poisson(lam=2)
+
     result = copy.deepcopy(ops)
     # move left boundary
     for n in range(1, len(result)-1):
@@ -111,10 +112,7 @@ def ops_stochastic_expand(
             else:
                 # if disable_insert, add at least one line => insert becomes replace
                 move = poisson()
-                if disable_insert:
-                    move = max(1, move)
-                else:
-                    move = min(ri2 - ri1 - 1, move)
+                move = max(1, move) if disable_insert else min(ri2 - ri1 - 1, move)
             if move < ri2 - ri1 and move > 0:
                 result[n] = (mop, mi1, mi2 + move, mj1, mj2 + move)
                 result[n+1] = (rop, ri1 + move, ri2, rj1 + move, rj2)
@@ -125,6 +123,7 @@ def test_stochastic(remove_short_equals=False, stochastic_replace_more=True):
     enc = RefactEncoding("openai_programming_v2")
     def dec(x):
         return enc.decode(x).replace("\n", "\\n")
+
     a_tokens = enc.encode(text_a)
     b_tokens = enc.encode(text_b)
     patch = difflib.SequenceMatcher(None, a_tokens, b_tokens, autojunk=False)
@@ -138,7 +137,7 @@ def test_stochastic(remove_short_equals=False, stochastic_replace_more=True):
     print("-"*100)
     for op, i1, i2, j1, j2 in ops:
         if op == "equal":
-            print(termcolor.colored(op, "magenta"), str(a_tokens[i1:i2]))
+            print(termcolor.colored(op, "magenta"), a_tokens[i1:i2])
             print(dec(a_tokens[i1:i2]))
         elif op in ["replace", "insert", "delete", "joined"]:
             print(op, termcolor.colored(str(a_tokens[i1:i2]), "red"), termcolor.colored(str(b_tokens[j1:j2]), "green"))

@@ -15,9 +15,7 @@ WAIT_TIMEOUT = 15
 def infserver_async_session() -> aiohttp.ClientSession:
     bearer = os.environ.get("SMALLCLOUD_API_KEY", "EMPTY")
     s = aiohttp.ClientSession()
-    s.headers.update({
-        "Authorization": "Bearer %s" % bearer,
-    })
+    s.headers.update({"Authorization": f"Bearer {bearer}"})
     return s
 
 
@@ -28,9 +26,9 @@ async def completions_wait_batch(
 ):
     txt = ""
     j = None
-    for attempt in range(5):
+    for _ in range(5):
         t0 = time.time()
-        url = stream_results.url_get_the_best() + "completions-wait-batch"
+        url = f"{stream_results.url_get_the_best()}completions-wait-batch"
         try:
             async with aio_session.post(url, json=my_desc, timeout=WAIT_TIMEOUT) as resp:
                 txt = await resp.text()
@@ -45,7 +43,7 @@ async def completions_wait_batch(
             stream_results.url_complain_doesnt_work()
             continue
         if "retcode" not in j:
-            logger.warning("%s unrecognized json: %s" % (url, txt[:150]))
+            logger.warning(f"{url} unrecognized json: {txt[:150]}")
             stream_results.url_complain_doesnt_work()
             continue
         break
@@ -146,7 +144,9 @@ class UploadAsync:
             try:
                 upload_dict = await asyncio.wait_for(self.upload_q.get(), timeout=600)
             except asyncio.TimeoutError:
-                logger.warning("%s %s" % (datetime.datetime.now().strftime("%H:%M:%S.%f"), termcolor.colored("upload_results_loop cancelled", "red")))
+                logger.warning(
+                    f'{datetime.datetime.now().strftime("%H:%M:%S.%f")} {termcolor.colored("upload_results_loop cancelled", "red")}'
+                )
                 exit_flag = True
                 continue
             if "exit" in upload_dict:
@@ -161,12 +161,11 @@ class UploadAsync:
                     break
                 maybe_pile_up = self.upload_q.get_nowait() if not self.upload_q.empty() else None
                 if maybe_pile_up is None:
-                    if time.time() < t1 + 0.3:
-                        # Normally send every ~0.5 seconds
-                        time.sleep(0.1)
-                        continue
-                    else:
+                    if time.time() >= t1 + 0.3:
                         break
+                    # Normally send every ~0.5 seconds
+                    time.sleep(0.1)
+                    continue
                 if "exit" in maybe_pile_up:
                     exit_flag = True
                 if "progress" in maybe_pile_up:
@@ -199,7 +198,7 @@ class UploadAsync:
             for _attempt in range(5):
                 j = dict()
                 try:
-                    url = stream_results.url_get_the_best() + "completion-upload-results"
+                    url = f"{stream_results.url_get_the_best()}completion-upload-results"
                     async with self.aio_session.post(url, json=upload_dict, timeout=2) as resp:
                         txt = await resp.text()
                         j = await resp.json()
@@ -213,7 +212,7 @@ class UploadAsync:
                     stream_results.url_complain_doesnt_work()
                     continue
                 if "retcode" not in j:
-                    logger.warning("%s unrecognied json: %s" % (url, txt[:150]))
+                    logger.warning(f"{url} unrecognied json: {txt[:150]}")
                     stream_results.url_complain_doesnt_work()
                     continue
                 break

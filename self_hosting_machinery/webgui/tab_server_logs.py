@@ -39,7 +39,7 @@ class TabServerLogRouter(APIRouter):
                     await asyncio.sleep(0.5)
 
         list_of_files = glob.glob(f'{env.DIR_LOGS}/watchdog_*.log')
-        if log_name in ["", "latest"]:
+        if log_name in {"", "latest"}:
             list_of_files.sort()
             list_of_files = list_of_files[-1:]
         else:

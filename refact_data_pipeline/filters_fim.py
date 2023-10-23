@@ -23,17 +23,17 @@ class SymbolsMiddleSplit:
         if self._min_symbols > max_symbols:
             raise RuntimeError
         mid_symbols = random.randint(self._min_symbols, max_symbols)
-        assert len(text) - mid_symbols - 1 >= 0
+        assert len(text) - mid_symbols >= 1
         split_pos = random.randint(0, len(text) - mid_symbols - 1)
         middle = text[split_pos:split_pos + mid_symbols]
         assert len(middle) == mid_symbols
 
-        prefix = text[:split_pos]
-        suffix = text[split_pos + mid_symbols:]
-        if not suffix and not middle:
+        if suffix := text[split_pos + mid_symbols :]:
+            return text[:split_pos], middle, suffix
+        elif middle:
+            return text[:split_pos], middle, suffix
+        else:
             raise RuntimeError
-
-        return prefix, middle, suffix
 
 
 class FIM:

@@ -104,21 +104,24 @@ class GPURouter(APIRouter):
         model_queue = self._inference_queue.model_name_to_queue(None, description.model, no_checks=True)
         user_reqs = []
         t0 = time.time()
-        for b in range(description.B):
+        for _ in range(description.B):
             try:
-                if len(user_reqs) == 0:
+                if not user_reqs:
                     time_passed = time.time() - t0
                     user_req = await asyncio.wait_for(
                         model_queue.get(), timeout=max(0., self._engine_wait_timeout - time_passed))
                 else:
                     user_req = model_queue.get_nowait()
                 if user_req.cancelled:
-                    log(red_time(user_req.call.get("created", 0)) + " cancelled %s, drop" % user_req.call.get("id", "NO-ID"))
+                    log(
+                        red_time(user_req.call.get("created", 0))
+                        + f' cancelled {user_req.call.get("id", "NO-ID")}, drop'
+                    )
                     continue
                 user_reqs.append(user_req)
             except (asyncio.TimeoutError, asyncio.queues.QueueEmpty):
                 break
-        if len(user_reqs) == 0:
+        if not user_reqs:
             return {"retcode": "WAIT"}
         log("wait_batch batch %i/%i => %s" % (len(user_reqs), description.B, description.infmod_guid))
         return {
@@ -134,11 +137,13 @@ class GPURouter(APIRouter):
         for ticket_id, resp in nlp_response.progress.items():
             ticket = self._id2ticket.get(ticket_id)
             if ticket is None:
-                log(red_time(resp.created) + " %s result arrived too late" % ticket_id)
+                log(f"{red_time(resp.created)} {ticket_id} result arrived too late")
                 cancelled_tickets.append(ticket_id)
                 continue
             if ticket.cancelled:
-                log(red_time(resp.created) + " %s result arrived, but ticket is cancelled" % ticket_id)
+                log(
+                    f"{red_time(resp.created)} {ticket_id} result arrived, but ticket is cancelled"
+                )
                 cancelled_tickets.append(ticket_id)
                 continue
             msgj = {

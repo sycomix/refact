@@ -42,11 +42,16 @@ def worker_loop(model_name: str, cpu: bool, load_lora: str, compile: bool):
             model_name=model_name,
             model_dict=model_dict)
 
+
+
     class DummyUploadProxy:
-        def upload_result(*args, **kwargs):
+        def upload_result(self, **kwargs):
             pass
-        def check_cancelled(*args, **kwargs):
+
+        def check_cancelled(self, **kwargs):
             return set()
+
+
     dummy_calls = [
         {
             'temperature': 0.8, 'top_p': 0.95, 'max_tokens': 40, 'id': 'comp-wkCX57Le8giP-1337', 'object': 'text_completion_req',
@@ -62,12 +67,14 @@ def worker_loop(model_name: str, cpu: bool, load_lora: str, compile: bool):
     if compile:
         return
 
-    log("STATUS serving %s" % model_name)
+    log(f"STATUS serving {model_name}")
     req_session = infserver_session()
     description_dict = validate_description_dict(
-        model_name + "_" + socket.getfqdn(),
+        f"{model_name}_{socket.getfqdn()}",
         "account_name",
-        model=model_name, B=1, max_thinking_time=10,
+        model=model_name,
+        B=1,
+        max_thinking_time=10,
     )
     upload_proxy = UploadProxy(upload_q=None, cancelled_q=None)
     upload_proxy.start_upload_result_daemon()
@@ -93,10 +100,7 @@ def worker_loop(model_name: str, cpu: bool, load_lora: str, compile: bool):
                     "ts_batch_finished": 0,
                 }
                 inference_model.infer(request, upload_proxy, upload_proxy_args)
-        elif retcode == "WAIT":
-            # Normal, no requests
-            pass
-        else:
+        elif retcode != "WAIT":
             # No connectivity, connection refused, other errors go there
             time.sleep(10)
 

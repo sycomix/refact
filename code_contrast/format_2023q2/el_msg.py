@@ -11,7 +11,7 @@ class MsgElement(Element):
 
 
     def pack_init(self, cx: ElementPackingContext) -> Tuple[List[int], List[int]]:
-        toks = cx.enc.encode(self.msg_role + " " + self.msg_text + "\n")
+        toks = cx.enc.encode(f"{self.msg_role} {self.msg_text}" + "\n")
         return toks, [1]*len(toks)
 
 
@@ -21,7 +21,7 @@ class MsgElement(Element):
         if t0 == cx.enc.ESCAPE:
             init_txt = cx.enc.decode(init_tokens[1:])
         else:
-            assert 0, "Cannot parse msg %s" % cx.enc.decode(init_tokens)
+            assert 0, f"Cannot parse msg {cx.enc.decode(init_tokens)}"
         return MsgElement(init_txt, "")
 
     def unpack_more_tokens(self, cx: ElementUnpackContext) -> bool:

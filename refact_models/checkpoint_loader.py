@@ -11,18 +11,16 @@ from typing import Optional
 def _load_gs_file(root_path: str, filename: str):
     import blobfile as bf
     rest = root_path[len("gs://"):]
-    slash = '/'
-    if root_path[-1] == '/':
-        slash = ''
+    slash = '' if root_path[-1] == '/' else '/'
     local = os.path.join("/tmp/small-cache-container", rest, filename)
     os.makedirs(os.path.dirname(local), exist_ok=True)
     path = f'{root_path}{slash}{filename}'
     if os.path.exists(local):
-        logging.info("using cached %s" % local)
+        logging.info(f"using cached {local}")
     else:
-        logging.info("download %s" % (path))
-        bf.copy(path, local + ".tmp")
-        os.rename(local + ".tmp", local)
+        logging.info(f"download {path}")
+        bf.copy(path, f"{local}.tmp")
+        os.rename(f"{local}.tmp", local)
     return str(local)
 
 

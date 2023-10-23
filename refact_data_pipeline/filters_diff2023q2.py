@@ -106,11 +106,10 @@ class Contrast2023Q2FromODM:
             first = [1] + [0]*(len(pack.r) - 1)
             assert len(pack.r) == len(first)
             assert len(pack.r) == len(pack.m)
-            emit = {
+            yield {
                 "tokens": pack.r,
                 "mask": pack.m,
                 "first": first,
-                "stats": {**odm["stats"], **stats}
+                "stats": {**odm["stats"], **stats},
             }
-            yield emit
 

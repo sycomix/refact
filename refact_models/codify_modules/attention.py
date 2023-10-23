@@ -59,8 +59,7 @@ class MultiheadSelfAttention(nn.Module):
             attn_weights = torch.masked_fill(attn_weights, attention_mask, -10000)
 
         attn_weights = F.softmax(attn_weights, dim=-1)
-        out = torch.matmul(attn_weights, value)
-        return out
+        return torch.matmul(attn_weights, value)
 
     def forward(self,
                 x: torch.Tensor,
@@ -80,13 +79,8 @@ class MultiheadSelfAttention(nn.Module):
             key = torch.cat((past_key, key), dim=-2)
             value = torch.cat((past_value, value), dim=-2)
 
-        if use_cache is True:
-            present = (key, value)
-        else:
-            present = None
-
+        present = (key, value) if use_cache else None
         attn_output = self.attention(query, key, value, attention_mask=attention_mask)
         attn_output = self._merge_heads(attn_output)
         attn_output = self.out(attn_output)
-        outputs = (attn_output, present)
-        return outputs
+        return attn_output, present

@@ -173,9 +173,9 @@ class TabFinetuneRouter(APIRouter):
         for dkey, dval in finetune_filtering_defaults.finetune_filtering_defaults.items():
             if dkey in validated and (validated[dkey] == dval or validated[dkey] is None):
                 del validated[dkey]
-        with open(env.CONFIG_HOW_TO_FILTER + ".tmp", "w") as f:
+        with open(f"{env.CONFIG_HOW_TO_FILTER}.tmp", "w") as f:
             json.dump(post.dict(), f, indent=4)
-        os.rename(env.CONFIG_HOW_TO_FILTER + ".tmp", env.CONFIG_HOW_TO_FILTER)
+        os.rename(f"{env.CONFIG_HOW_TO_FILTER}.tmp", env.CONFIG_HOW_TO_FILTER)
         return JSONResponse("OK")
 
     async def _tab_finetune_smart_filter_get(self):
@@ -192,9 +192,9 @@ class TabFinetuneRouter(APIRouter):
         for dkey, dval in finetune_train_defaults.finetune_train_defaults.items():
             if dkey in validated and (validated[dkey] == dval or validated[dkey] is None):
                 del validated[dkey]
-        with open(env.CONFIG_FINETUNE + ".tmp", "w") as f:
+        with open(f"{env.CONFIG_FINETUNE}.tmp", "w") as f:
             json.dump(post.dict(), f, indent=4)
-        os.rename(env.CONFIG_FINETUNE + ".tmp", env.CONFIG_FINETUNE)
+        os.rename(f"{env.CONFIG_FINETUNE}.tmp", env.CONFIG_FINETUNE)
         return JSONResponse("OK")
 
     async def _tab_finetune_training_get(self):
@@ -210,7 +210,7 @@ class TabFinetuneRouter(APIRouter):
         sanitize_run_id(run_id)
         log_path = os.path.join(env.DIR_LORAS, run_id, "log.txt")
         if not os.path.isfile(log_path):
-            return Response("File '%s' not found" % log_path, status_code=404)
+            return Response(f"File '{log_path}' not found", status_code=404)
         return StreamingResponse(
             stream_text_file(log_path),
             media_type="text/event-stream"
@@ -222,8 +222,10 @@ class TabFinetuneRouter(APIRouter):
         if os.path.exists(svg_path):
             svg = open(svg_path, "r").read()
         else:
-            svg = "<svg width=\"432\" height=\"216\" xmlns=\"http://www.w3.org/2000/svg\">"
-            svg += '<path d="M 50 10 L 140 110 L 350 200 L 50 200 L 50 10" stroke="#AAA" stroke-width="2" fill="#DDD" />'
+            svg = (
+                "<svg width=\"432\" height=\"216\" xmlns=\"http://www.w3.org/2000/svg\">"
+                + '<path d="M 50 10 L 140 110 L 350 200 L 50 200 L 50 10" stroke="#AAA" stroke-width="2" fill="#DDD" />'
+            )
             svg += "</svg>"
         return Response(svg, media_type="image/svg+xml")
 
@@ -256,7 +258,7 @@ class TabFinetuneRouter(APIRouter):
         sanitize_run_id(run_id)
         home_path = os.path.join(env.DIR_LORAS, run_id)
         if not os.path.exists(home_path):
-            return Response("Run id '%s' not found" % home_path, status_code=404)
+            return Response(f"Run id '{home_path}' not found", status_code=404)
         shutil.rmtree(home_path)
         return JSONResponse("OK")
 

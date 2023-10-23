@@ -41,8 +41,7 @@ def plot(
     y1 = -1e10
     logscale = False
 
-    m = re.fullmatch("(.*)\[([-0-9.e]+),([-0-9.e]+)\](.*)", yaxis)
-    if m:
+    if m := re.fullmatch("(.*)\[([-0-9.e]+),([-0-9.e]+)\](.*)", yaxis):
         options = [x.strip() for x in m.group(4).split(",")]
         yaxis = m.group(1)
         y0 = float(m.group(2))
@@ -52,15 +51,14 @@ def plot(
         yaxis = options[0]
     options = options[1:]
     for o in options:
-        m = re.fullmatch("smooth={0,1}([0-9]+)", o)
-        if m:
+        if m := re.fullmatch("smooth={0,1}([0-9]+)", o):
             smoo = int(m.group(1))
         elif o == "log":
             logscale = True
         else:
             raise ValueError("Invalid option \"%s\"" % o)
-    for f in jdict:
-        for j in jdict[f]:
+    for f, value in jdict.items():
+        for j in value:
             if xaxis in j and yaxis in j:
                 xs[f].append(j[xaxis])
                 ys[f].append(j[yaxis])
@@ -77,8 +75,7 @@ def plot(
         if len(xs[f]) > 0:
             x0auto = min(x0auto, min(xs[f]))
             x1auto = max(x1auto, max(xs[f]))
-        ys_finite = [y for y in ys[f] if np.isfinite(y)]
-        if len(ys_finite) > 0:
+        if ys_finite := [y for y in ys[f] if np.isfinite(y)]:
             y0auto = min(y0auto, min(ys_finite))
             y1auto = max(y1auto, max(ys_finite))
     x0 = x0 if x0 != -1e10 else x0auto
@@ -97,7 +94,7 @@ def plot(
         if f in smoo_ys and colors[i] is not None:
             plt.plot(xs[f], smoo_ys[f], color=colors[i])
             p = plt.plot(xs[f], ys[f], color=colors[i], alpha=0.2)
-        elif f in smoo_ys and colors[i] is None:
+        elif f in smoo_ys:
             p = plt.plot(xs[f], smoo_ys[f])
         else:
             p = plt.plot(xs[f], ys[f], color=colors[i])
@@ -108,7 +105,7 @@ def plot(
         plt.yscale("log")
     plt.grid(which="both", alpha=0.2)
     plt.title(yaxis, loc="right")
-    plt.legend(plots_for_legend, [k for k in jdict.keys()], loc="upper right")
+    plt.legend(plots_for_legend, list(jdict.keys()), loc="upper right")
     plt.savefig(buf, format='svg')
     plt.close('all')
     buf.seek(0)
@@ -116,9 +113,7 @@ def plot(
 
 
 if __name__ == "__main__":
-    jdict = {}
-    jdict["test"] = []
-    jdict["train"] = list(jsonlines.open(sys.argv[1]))
+    jdict = {"test": [], "train": list(jsonlines.open(sys.argv[1]))}
     for line in jdict["train"]:
         line = copy.deepcopy(line)
         if "test_loss" in line:

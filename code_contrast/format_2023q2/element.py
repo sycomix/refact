@@ -21,7 +21,7 @@ class ElementPackingContext:
         self.limit_aux_n = limit_aux_n
         self.filled_ctx_n = 0
         self.filled_aux_n = 0
-        self.occupied_line_ranges: List[Tuple[int, int]] = list()
+        self.occupied_line_ranges: List[Tuple[int, int]] = []
         self.minimal_context_too_big_warning = False
 
 
@@ -29,7 +29,7 @@ class ElementUnpackContext:
     def __init__(self, fmt: Format2023q2, lookup_file: Callable):
         self.fmt = fmt
         self.enc = fmt.enc
-        self.tokens: List[int] = list()
+        self.tokens: List[int] = []
         self.lookup_file = lookup_file
 
 
@@ -98,7 +98,7 @@ class Element:
                 continue
             val_str = repr(val)
             val_str = re.sub('\033\[.*?m', '', val_str)
-            val_str = val_str[:40] + "... " if len(val_str) > 40 else val_str + " "
-            ret += field + " " + termcolor.colored(val_str, "cyan") + " "
+            val_str = f"{val_str[:40]}... " if len(val_str) > 40 else f"{val_str} "
+            ret += f"{field} " + termcolor.colored(val_str, "cyan") + " "
         return ret
 

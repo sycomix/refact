@@ -21,8 +21,7 @@ DEBUG = int(os.environ.get("DEBUG", "0"))
 
 @functools.lru_cache(maxsize=10)
 def engine_to_encoding(engine: str) -> tiktoken.Encoding:
-    enc = tiktoken.encoding_for_model(engine)
-    return enc
+    return tiktoken.encoding_for_model(engine)
 
 
 ACCUMULATE_N_STREAMING_CHUNKS = 5
@@ -96,8 +95,8 @@ class ScratchpadToolboxGPT(ascratch.AsyncScratchpad):
     def model_name(self) -> str:
         if not self.__model_name:
             model_name = 'gpt-3.5-turbo-0613'
-            if self._model_n == 'gpt-3.5-turbo' or self._model_n == 'gpt-4':
-                model_name = self._model_n + '-0613'
+            if self._model_n in ['gpt-3.5-turbo', 'gpt-4']:
+                model_name = f'{self._model_n}-0613'
             self.__model_name = model_name
         return self.__model_name
 
@@ -183,21 +182,20 @@ class ScratchpadToolboxGPT(ascratch.AsyncScratchpad):
     def toplevel_fields(self):
         if not self.finish_reason:
             return {}
-        else:
-            calc_prompt_tokens_n, calc_generated_tokens_n = calculate_chat_tokens(
-                self.model_name, self.messages, self.completion_so_far
-            )
-            self.metering_prompt_tokens_n = self.openai_prompt_tokens_n or calc_prompt_tokens_n
-            self.metering_generated_tokens_n = self.openai_completion_tokens or calc_generated_tokens_n
-            metering_message = {
-                "metering_prompt_tokens_n": self.metering_prompt_tokens_n,
-                "metering_generated_tokens_n": self.metering_generated_tokens_n,
-                "pp1000t_prompt": self.prices[0],
-                "pp1000t_generated": self.prices[1],
-                "model_name": self.model_name,
-            }
-            self.debuglog(json.dumps(metering_message))
-            return metering_message
+        calc_prompt_tokens_n, calc_generated_tokens_n = calculate_chat_tokens(
+            self.model_name, self.messages, self.completion_so_far
+        )
+        self.metering_prompt_tokens_n = self.openai_prompt_tokens_n or calc_prompt_tokens_n
+        self.metering_generated_tokens_n = self.openai_completion_tokens or calc_generated_tokens_n
+        metering_message = {
+            "metering_prompt_tokens_n": self.metering_prompt_tokens_n,
+            "metering_generated_tokens_n": self.metering_generated_tokens_n,
+            "pp1000t_prompt": self.prices[0],
+            "pp1000t_generated": self.prices[1],
+            "model_name": self.model_name,
+        }
+        self.debuglog(json.dumps(metering_message))
+        return metering_message
 
     def debuglog(self, *args):
         if self._logger:

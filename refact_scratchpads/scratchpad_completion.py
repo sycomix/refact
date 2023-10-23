@@ -48,13 +48,8 @@ class ScratchpadCompletion(ScratchpadBase):
         #self._tokens = [2] + self.enc.encode(self.call["prompt"])
         assert len(self._tokens) == 0
         p = self.enc.encode(self._prompt)
-        if self._echo:
-            self._tokens = p
-        else:
-            self._tokens = []
-        if len(p) > T:
-            return []
-        return p
+        self._tokens = p if self._echo else []
+        return [] if len(p) > T else p
 
     def completion(self, final: bool):
         return {"text": self.enc.decode(self._tokens, skip_zeros=True, cut_at_eot=True)}

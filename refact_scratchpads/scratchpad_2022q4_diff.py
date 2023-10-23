@@ -67,7 +67,10 @@ class ScratchpadDiff(ScratchpadBase):
         self.increase_logits = []
         self.no_stop_tokens_until = -1
         self.selected_newlines = -1
-        self.selection_is_important = (self.function in ["diff-atcursor", "diff-selection"])
+        self.selection_is_important = self.function in {
+            "diff-atcursor",
+            "diff-selection",
+        }
         self.backward_cache_snippet: str = ""
         self.backward_cache_tokens: List[int] = []
         self.backward_cache_cursor: int = 0
@@ -106,10 +109,10 @@ class ScratchpadDiff(ScratchpadBase):
                 self.diff_out_us.brewing_edit.real_delstart != -1 and
                 self.diff_out_us.brewing_edit.fn == self.cursor_file
         ):
-            e = self.diff_out_us.brewing_edit
-            scratch = self.diff_out_us.scratch[e.fn]
             if self.cursorfile_tokens2 is not None:
                 tokens2 = self.cursorfile_tokens2
+                e = self.diff_out_us.brewing_edit
+                scratch = self.diff_out_us.scratch[e.fn]
                 assert all(tokens2[i] == scratch[i] for i in range(len(scratch)))
                 # print("todel:", termcolor.colored(self.enc.decode(scratch[e.real_delstart:e.real_delends]), "yellow"))
                 # good, _ = self._lookahead_ignoring_tpos(scratch, e.real_delstart, e.todel)
@@ -122,7 +125,7 @@ class ScratchpadDiff(ScratchpadBase):
                         extra_newlines = len([t for t in scratch[self.t_cursor1:self.diff_out_us.brewing_edit.real_delends] if t == self.enc.LF])
                         if extra_newlines >= 0:
                             logits_intrusion[self.enc.ESCAPE] = 5.0 + 0.5 * extra_newlines
-                # edit works like this: scratch[e.real_delstart:e.real_delends] = e.toins
+                        # edit works like this: scratch[e.real_delstart:e.real_delends] = e.toins
         T = logits.shape[0]
         UPTO = 10
         if T > UPTO and self.backward_cache_cursor > UPTO+1:  # infill function only
@@ -186,9 +189,10 @@ class ScratchpadDiff(ScratchpadBase):
         else:
             self.diff_out_catch_up()
         dest_tokens = self.diff_out.apply_edits_return_dest(self.diff_out_us)
-        result = {}
-        for fn in dest_tokens:
-            result[fn] = self.enc.decode(self.diff_out.dest_tokens[fn])
+        result = {
+            fn: self.enc.decode(self.diff_out.dest_tokens[fn])
+            for fn in dest_tokens
+        }
         self.debuglog("ScratchpadDiff: final=%i" % final, self.diff_out_us.stats, self.finish_reason)
         return result
 
@@ -203,6 +207,7 @@ class ScratchpadDiff(ScratchpadBase):
                     self.debuglog("REATTACH '%s'\n" % (self.ugly_hack_reattach_next_line.replace("\n", "\\n")))
                     self.diff_out.edits[0].toins.extend(self.enc.encode(self.ugly_hack_reattach_next_line) + [self.enc.LF])
             self.diff_out_us.state = format_2022q3.contrast.WAIT
+
         try:
             while self.diff_out_cursor < len(self.diff.r):
                 c = self.diff_out_cursor
@@ -234,7 +239,7 @@ class ScratchpadDiff(ScratchpadBase):
                         finish("out-of-selection")
                         break
         except format_2022q3.DecodeError as e:
-            self.debuglog("Exception in diff_out.untokenize_new_token: %s" % e)
+            self.debuglog(f"Exception in diff_out.untokenize_new_token: {e}")
             self.finish_reason = "diff-application-error"
 
     def prompt_infill(self, T):
@@ -244,14 +249,13 @@ class ScratchpadDiff(ScratchpadBase):
                 slash_n_idx = cut_slash_n.find("\n")
                 if slash_n_idx >= 0:
                     cut_slash_n = cut_slash_n[slash_n_idx+1:]
-                if 1:
-                    # To fully remove this, we need to retrain the model, the q1 version should fix it
-                    next_slash_n = cut_slash_n.find("\n")
-                    if next_slash_n >= 0:
-                        self.ugly_hack_reattach_next_line = cut_slash_n[:next_slash_n]
-                        self.debuglog("self.ugly_hack_reattach_next_line \"%s\"" % self.ugly_hack_reattach_next_line.replace("\n", "\\n"))
-                    else:
-                        self.ugly_hack_reattach_next_line = None
+                # To fully remove this, we need to retrain the model, the q1 version should fix it
+                next_slash_n = cut_slash_n.find("\n")
+                if next_slash_n >= 0:
+                    self.ugly_hack_reattach_next_line = cut_slash_n[:next_slash_n]
+                    self.debuglog("self.ugly_hack_reattach_next_line \"%s\"" % self.ugly_hack_reattach_next_line.replace("\n", "\\n"))
+                else:
+                    self.ugly_hack_reattach_next_line = None
                 self.odm["orig"][fn] = text[:self.cursor0] + self.enc.decode([self.enc.INFILL]) + cut_slash_n
                 self.odm["dest"][fn] = text[:self.cursor0] + self.enc.decode([self.enc.DUMMY]) + cut_slash_n
             elif fn in self.file_poi:

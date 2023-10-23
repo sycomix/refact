@@ -22,7 +22,7 @@ def p(tensor) -> str:
 class MyLogHandler(logging.Handler):
     def emit(self, record):
         timestamp = datetime.datetime.now().strftime("%Y%m%d %H:%M:%S")
-        sys.stderr.write(timestamp + " " + self.format(record) + "\n")
+        sys.stderr.write(f"{timestamp} {self.format(record)}" + "\n")
         sys.stderr.flush()
 
 
@@ -82,7 +82,7 @@ def configure(
         task_dir=task_dir,
         task_name=task_name,
         path=path,
-        unique_id=task_dir + "-" + task_name,
+        unique_id=f"{task_dir}-{task_name}",
         console_logger=sys.stdout,
         progress=None,
         log_fn=os.path.join(path, "log.txt"),
@@ -110,11 +110,11 @@ def progress_dump(
     _cx.name2val.clear()
 
     if _cx.progress is None:
-        _cx.progress = open(_cx.path + "/progress.jsonl", "w")
+        _cx.progress = open(f"{_cx.path}/progress.jsonl", "w")
     _cx.progress.write(json.dumps(avg) + "\n")
     _cx.progress.flush()
 
-    if len(avg) == 0:
+    if not avg:
         return avg
 
     out = [(k, "%-8.3g" % v) for k, v in avg.items()]
@@ -124,10 +124,7 @@ def progress_dump(
     for k, v in out:
         if [1 for ignore in ignore_list if k.startswith(ignore)]:
             continue
-        msg.append(
-            "| %s%s | %s%s |"
-            % (k, " " * (kwidth - len(k)), v, " " * (vwidth - len(v)))
-        )
+        msg.append(f'| {k}{" " * (kwidth - len(k))} | {v}{" " * (vwidth - len(v))} |')
     msg.append(msg[0])
     if len(msg) > 2:
         log("\n".join(msg))

@@ -37,9 +37,9 @@ def query_nvidia_smi():
 
 def enum_gpus():
     result = query_nvidia_smi()
-    with open(env.CONFIG_ENUM_GPUS + ".tmp", 'w') as f:
+    with open(f"{env.CONFIG_ENUM_GPUS}.tmp", 'w') as f:
         json.dump(result, f, indent=4)
-    os.rename(env.CONFIG_ENUM_GPUS + ".tmp", env.CONFIG_ENUM_GPUS)
+    os.rename(f"{env.CONFIG_ENUM_GPUS}.tmp", env.CONFIG_ENUM_GPUS)
 
 
 if __name__ == '__main__':

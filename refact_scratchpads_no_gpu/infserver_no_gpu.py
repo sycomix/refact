@@ -54,17 +54,12 @@ experimental_functions = {
 }
 
 supported_models = {
-    "longthink/stable": {
-        "functions": {
-            **gpt_functions,
-            **experimental_functions,
-        }
-    },
+    "longthink/stable": {"functions": gpt_functions | experimental_functions}
 }
 
 
 for mod in ["debug", "experimental"]:
-    supported_models["longthink/" + mod] = supported_models["longthink/stable"]
+    supported_models[f"longthink/{mod}"] = supported_models["longthink/stable"]
 
 
 host = socket.getfqdn()
@@ -72,19 +67,19 @@ quit_flag = False
 
 
 def dump_problematic_call(stacktrace: str, stacktrace_short: str, suspicious_call):
-    if suspicious_call and not DEBUG:
-        # not DEBUG means in production, save it to disk to check out later
-        ymd = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        dump_path = f'./{ymd}_infserver_no_gpu_stacktrace.dump'
-        with open(dump_path, 'w') as f:
-            f.write(f"{host} caught exception:\n{stacktrace}")
-            f.flush()
-            f.write(json.dumps(suspicious_call))
-        sys.stdout.write("'%s' DUMP SAVED TO %s\n" % (stacktrace_short, dump_path))
-        sys.stdout.flush()
-    elif suspicious_call:
-        # if DEBUG, just print the call that caused the problem
-        sys.stdout.write(json.dumps(suspicious_call))
+    if suspicious_call:
+        if not DEBUG:
+            # not DEBUG means in production, save it to disk to check out later
+            ymd = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            dump_path = f'./{ymd}_infserver_no_gpu_stacktrace.dump'
+            with open(dump_path, 'w') as f:
+                f.write(f"{host} caught exception:\n{stacktrace}")
+                f.flush()
+                f.write(json.dumps(suspicious_call))
+            sys.stdout.write("'%s' DUMP SAVED TO %s\n" % (stacktrace_short, dump_path))
+        else:
+            # if DEBUG, just print the call that caused the problem
+            sys.stdout.write(json.dumps(suspicious_call))
         sys.stdout.flush()
 
 
@@ -110,21 +105,24 @@ async def handle_single_batch(routine_n, my_desc, model_dict, calls_unfiltered):
         msg = " ".join(map(str, args))
         msg = "R%04d" % routine_n + " " + msg
         stream_results_async.logger.info(msg)
+
     try:
         scratchpads = []
         for ci, call in enumerate(calls_unfiltered):
             function = call.get("function", "completion")
             import_str = model_dict["functions"].get(function, None)
             if import_str is None:
-                logger("function '%s' is not supported in model '%s'" % (function, call["model"]))
+                logger(
+                    f"""function '{function}' is not supported in model '{call["model"]}'"""
+                )
                 continue
             import_mod, import_class = import_str.rsplit(":", 1)
             mod = importlib.import_module(import_mod)
             Class = getattr(mod, import_class, None)
             if Class is None:
-                logger("module '%s', class '%s' not found" % (import_mod, import_class))
+                logger(f"module '{import_mod}', class '{import_class}' not found")
                 continue
-            logger("running '%s' using %s" % (function, import_class))
+            logger(f"running '{function}' using {import_class}")
             calls.append(call)
             spad = Class(logger=logger, **call)
             scratchpads.append(spad)
@@ -179,7 +177,7 @@ async def do_the_serving(
     routine_n: int,
 ):
     aio_session = stream_results_async.infserver_async_session()
-    infmod_guid = longthink_variant + "_" + host + "_%04i" % routine_n
+    infmod_guid = f"{longthink_variant}_{host}" + "_%04i" % routine_n
     infmod_guid = infmod_guid.replace("-", "_")
     stream_results_async.logger.info(f'infmod_guid: {infmod_guid}')
     while not quit_flag:
@@ -195,7 +193,7 @@ async def do_the_serving(
         if retcode == "WAIT":
             continue
         if retcode != "OK":
-            stream_results_async.logger.warning("server retcode %s" % retcode)
+            stream_results_async.logger.warning(f"server retcode {retcode}")
             await asyncio.sleep(5)
             continue
         await handle_single_batch(routine_n, my_desc, model_dict, calls_unfiltered)

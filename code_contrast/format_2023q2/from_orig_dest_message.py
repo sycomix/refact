@@ -38,7 +38,9 @@ def from_odm_dict(
     chunks: List[ChunkElement] = []
     for fn in fns:
         if (external_poi_ranges is None or fn not in external_poi_ranges) and fn not in files2:
-            print("WARNING: file '%s' is not in dest or POI, context will not contain it" % fn)
+            print(
+                f"WARNING: file '{fn}' is not in dest or POI, context will not contain it"
+            )
             continue
         f = FileElement(fn, [(x + "\n") for x in odm["orig"][fn].splitlines()])
         pack.add_to_plan(f)
@@ -60,8 +62,7 @@ def from_odm_dict(
         file0 = chunks[0].orig_file
         modlines = file0._lines_deleted | file0._lines_replaced | file0._lines_inspoints
         thischunk_lines = set(range(chunks[0].line_n, chunks[0].line_n + len(chunks[0].to_del) + 1))
-        thischunk_modlines = list(thischunk_lines & modlines)
-        if len(thischunk_modlines) > 0:  # Can be zero for whatever reason, cursor appearance is random anyway
+        if thischunk_modlines := list(thischunk_lines & modlines):
             aim = random.choice(thischunk_modlines)
             shift = np.random.poisson(2)
             sign = np.random.choice([-1, 1])
@@ -88,10 +89,8 @@ def _run_diff_for_single_file(f: FileElement, dest_text: List[str], exact_cx_lin
         elif op == "replace":
             assert i1 > i0
             f._lines_replaced.update(range(i0, i1))
-        elif op == "equal":
-            pass
-        else:
-            assert 0, "unknown op %s" % op
+        elif op != "equal":
+            assert 0, f"unknown op {op}"
     lines_diff = ops_stochastic_expand(lines_diff,
         left_prob=1, right_prob=1,
         exact_cx_lines0=exact_cx_lines0, exact_cx_lines1=exact_cx_lines1,

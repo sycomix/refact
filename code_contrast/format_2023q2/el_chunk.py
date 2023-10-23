@@ -60,9 +60,7 @@ class ChunkElement(Element):
         if self._state == STATE_LINE_N:
             tmp = cx.enc.decode(self._line_tokens)
             try:
-                # Format is "0008 test.py", filename can contain spaces, slashes, etc
-                m = re.fullmatch(r"^(\d+) (.+)\n.*", tmp)
-                if m:
+                if m := re.fullmatch(r"^(\d+) (.+)\n.*", tmp):
                     self._hint_line = int(m.group(1))
                     self._hint_file = m.group(2)
             except ValueError:
@@ -79,13 +77,12 @@ class ChunkElement(Element):
             t1 = cx.tokens[1]
             # print("chunk.unpack %5i \"%s\"" % (t0, cx.enc.decode([t0]).replace("\n", "\\n")))
             if cx.fmt.is_special_token(t0):
-                if self._state == STATE_DEL and t1 == self._tok_LINE:
-                    self._switch_state(cx, STATE_LINE_N)
-                    del cx.tokens[:2]
-                    continue
-                else:
+                if self._state != STATE_DEL or t1 != self._tok_LINE:
                     # print("special token, must be next element, chunk over")
                     return True
+                self._switch_state(cx, STATE_LINE_N)
+                del cx.tokens[:2]
+                continue
             if self._state == STATE_LINE_N:
                 t1_txt = cx.enc.decode([t1])
                 self._line_tokens.append(t0)
@@ -99,7 +96,7 @@ class ChunkElement(Element):
                 self._del_tokens.append(cx.tokens.pop(0))
                 self._locate_this_chunk_in_file_above(cx, force=False)
             else:
-                assert 0, "unknown state %s" % self._state
+                assert 0, f"unknown state {self._state}"
         return False
 
     def unpack_finish(self, cx: ElementUnpackContext):
@@ -150,8 +147,8 @@ class ChunkElement(Element):
                 return
             # print("xxx\n" + "\n".join([str(x) for x in lst]))
             self.orig_file, self.line_n, self.fuzzy = lst[0]
-            if force and self.fuzzy != 0:
-                print("WARNING: fuzzy not zero chunk, todel=\"%s\" hints line_n=%i, line=%s" % (to_del_str[:100].replace("\n", "\\n"), self.line_n, self.orig_file.file_lines[self.line_n]))
+        if force and self.fuzzy != 0:
+            print("WARNING: fuzzy not zero chunk, todel=\"%s\" hints line_n=%i, line=%s" % (to_del_str[:100].replace("\n", "\\n"), self.line_n, self.orig_file.file_lines[self.line_n]))
 
 
 def apply_chunks(plan: List[Element]) -> Dict[str, List[str]]:

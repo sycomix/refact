@@ -55,13 +55,10 @@ class ScratchpadBase:
         self._logger = logger
         self.created = created
         self.finish_reason = ""
-        self.temp = min(max(float(temperature), 0.0), 1.0)
-        self.max_tokens = int(max_tokens)
+        self.temp = min(max(temperature, 0.0), 1.0)
+        self.max_tokens = max_tokens
         tmp = stop_tokens
-        if isinstance(tmp, str):
-            stop_strings = [tmp]
-        else:
-            stop_strings = tmp
+        stop_strings = [tmp] if isinstance(tmp, str) else tmp
         self.stop_tokens: Set[int] = set()
         self.stop_lf = False
         self.stop_lf_lf = False
@@ -83,7 +80,7 @@ class ScratchpadBase:
             else:
                 self.debuglog("ScratchpadBase: cannot use '%s' as a stop token" % (s.replace("\n", "\\n")))
         for k, v in unused.items():
-            self.debuglog("ScratchpadBase: unused parameter '%s' = '%s'" % (k, v))
+            self.debuglog(f"ScratchpadBase: unused parameter '{k}' = '{v}'")
         self.generated_tokens_n = 0
         self.needs_upload = False
 
@@ -120,11 +117,9 @@ class ScratchpadBase:
                     top_p=top_ps[b], top_k=top_ks[b]
                 )
             probs = logits[:, [-1]].softmax(dim=-1)
-            a = th.multinomial(probs, num_samples=1)
         else:
             probs = (logits[:, [-1]] / (temperatures + 0.01)).squeeze(1).softmax(dim=-1)
-            a = th.multinomial(probs, num_samples=1)
-
+        a = th.multinomial(probs, num_samples=1)
         if model_parallel_group is not None:
             dist.broadcast(a, src=0, group=model_parallel_group)
 
@@ -152,8 +147,8 @@ class ScratchpadBase:
         raise NotImplementedError()
 
     def set_model_thresholds(self, **args):
-        if len(args) > 0:
-            self.debuglog("set_model_thresholds: unused parameters %s" % str(args))
+        if args:
+            self.debuglog(f"set_model_thresholds: unused parameters {args}")
 
     def debuglog(self, *args):
         elapsed = time.time() - self.created

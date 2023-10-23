@@ -65,7 +65,7 @@ class ScratchpadHuggingfaceBase:
         self.finish_reason = ""
 
         for k, v in unused.items():
-            self.debuglog("ScratchpadHuggingfaceBase: unused parameter '%s' = '%s'" % (k, v))
+            self.debuglog(f"ScratchpadHuggingfaceBase: unused parameter '{k}' = '{v}'")
 
     def after_token_selection(self, m, chosen_token: th.Tensor, **unused) -> Dict[str, Any]:
         t = chosen_token.item()
@@ -233,10 +233,7 @@ class ScratchpadHuggingfaceWizard(ScratchpadChatBase):
         for message in self._messages:
             if message["content"] == "":
                 continue
-            if message["role"] == "user":
-                text += "USER: "
-            else:
-                text += "ASSISTANT: "
+            text += "USER: " if message["role"] == "user" else "ASSISTANT: "
             text += message["content"] + "\n"
         text += "ASSISTANT: "
         return text
@@ -276,10 +273,7 @@ class ScratchpadHuggingfaceRefact(ScratchpadChatBase):
         for message in self._messages:
             if message["content"] == "":
                 continue
-            if message["role"] == "user":
-                text += f"{esc}USER "
-            else:
-                text += f"{esc}ASSISTANT "
+            text += f"{esc}USER " if message["role"] == "user" else f"{esc}ASSISTANT "
             text += message["content"] + "\n"
         text += f"{esc}ASSISTANT "
         return text

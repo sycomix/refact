@@ -48,9 +48,12 @@ status_dict = {
 
 def _save_stats(status_string):
     save_status_json(status_dict, status_string)
-    with open(env.CONFIG_FINETUNE_FILTER_STATS + ".tmp", "w") as f:
+    with open(f"{env.CONFIG_FINETUNE_FILTER_STATS}.tmp", "w") as f:
         json.dump(status_dict, f, indent=4)
-    os.rename(env.CONFIG_FINETUNE_FILTER_STATS + ".tmp", env.CONFIG_FINETUNE_FILTER_STATS)
+    os.rename(
+        f"{env.CONFIG_FINETUNE_FILTER_STATS}.tmp",
+        env.CONFIG_FINETUNE_FILTER_STATS,
+    )
 
 
 def _try_load_stats():
@@ -83,7 +86,7 @@ def get_force_included_excluded_matchers():
         "filetypes_db": {}
     }
     if os.path.exists(env.CONFIG_HOW_TO_FILETYPES):
-        traces.log("Reading %s" % env.CONFIG_HOW_TO_FILETYPES)
+        traces.log(f"Reading {env.CONFIG_HOW_TO_FILETYPES}")
         with open(env.CONFIG_HOW_TO_FILETYPES, "r") as f:
             fcfg.update(**json.load(f))
 
@@ -137,7 +140,7 @@ def loss_based_filter(
             else:
                 file_losses.append(loss)
 
-        if len(file_losses) == 0:
+        if not file_losses:
             traces.log("REJECTED FILTER %-100s empty" % file["path"])
             rejected.add(file["path"])
             _file_rejected("FILTER1 EMPTY", file["path"])
@@ -172,7 +175,7 @@ def loss_based_filter(
 def pre_filtering():
     fcfg = {**finetune_filtering_defaults.finetune_filtering_defaults}
     if os.path.exists(env.CONFIG_HOW_TO_FILTER):
-        traces.log("Reading %s" % env.CONFIG_HOW_TO_FILTER)
+        traces.log(f"Reading {env.CONFIG_HOW_TO_FILTER}")
         fcfg.update(**json.load(open(env.CONFIG_HOW_TO_FILTER)))
 
     has_train_files = os.path.exists(os.path.join(env.DIR_UNPACKED, unfiltered_train)) and \
@@ -229,7 +232,7 @@ def pre_filtering():
     )
 
     test_filenames = set()
-    if len(test_files) == 0:
+    if not test_files:
         test_files_count = min(fcfg["limit_test_files"], len(train_files) // 2)
         if test_files_count == 0:
             traces.log("Warning: It is too little files to choose a test set from. "
@@ -250,7 +253,7 @@ def pre_filtering():
     traces.log("-" * 40 + "TEST SET" + "-" * 40)
     with open(filtered_test, "w") as f:
         for fdict in test_files:
-            traces.log("test set file: %s" % (fdict["path"]))
+            traces.log(f'test set file: {fdict["path"]}')
             f.write(json.dumps(fdict) + "\n")
 
 
@@ -284,7 +287,7 @@ def main():
         _save_stats("finished")
     except BaseException as e:  # BaseException includes KeyboardInterrupt
         if traces.context():
-            logging.error("FAILED finetune filter at %s" % traces.context().path)
+            logging.error(f"FAILED finetune filter at {traces.context().path}")
         if "error" not in status_dict:  # if there is, a more detailed error is already in place
             t = str(e) or str(type(e))
             status_dict["error"] = t

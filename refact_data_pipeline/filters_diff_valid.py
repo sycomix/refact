@@ -43,8 +43,8 @@ class DiffValidInstructPrompt:
     def __iter__(self):
         for ex in self.inner_filter:
             odm = {
-                "orig": {fn: text for fn, text in ex["orig"].items()},
-                "dest": {fn: text for fn, text in ex["dest"].items()},
+                "orig": dict(ex["orig"].items()),
+                "dest": dict(ex["dest"].items()),
                 "commitmsg": ex["commitmsg"],
                 "stats": ex["stats"],
             }
@@ -58,19 +58,5 @@ class DiffValidInstructPrompt:
             ex["completion_tokens"] = diff.r[diff.offset_first_postoken:]
             odm["orig_tokens"] = diff.orig_tokens
             ex["decode_result_fn"] = functools.partial(_diff_valid_decode_result, self.enc, odm)
-            if 0:
-                import termcolor
-                import difflib
-                out = ex["decode_result_fn"](diff.r)
-                for fn in out["code"].keys():
-                    print(termcolor.colored(out["code"][fn], "red"))
-                    print(termcolor.colored(ex["dest"][fn], "blue"))
-                    print("".join(difflib.unified_diff(
-                        out["code"][fn].splitlines(keepends=True),
-                        ex["dest"][fn].splitlines(keepends=True),
-                        fromfile="code",
-                        tofile="dest",
-                    )))
-                    assert out["code"][fn] == ex["dest"][fn]
             yield ex
 

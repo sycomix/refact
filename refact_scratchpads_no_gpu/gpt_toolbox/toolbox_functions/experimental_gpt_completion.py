@@ -7,7 +7,7 @@ from refact_scratchpads_no_gpu.gpt_toolbox.gpt_toolbox_spad import ScratchpadToo
 class GptCompletion(ScratchpadToolboxGPT):
     def _messages(self) -> List[Dict[str, str]]:
         cursor0, _, ctxt = self.trim_context()
-        ctxt = ctxt[:cursor0] + '<|complete-me|>' + ctxt[cursor0:]
+        ctxt = f'{ctxt[:cursor0]}<|complete-me|>{ctxt[cursor0:]}'
         return [
             msg(
                 'system',

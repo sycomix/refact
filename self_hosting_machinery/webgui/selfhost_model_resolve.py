@@ -20,17 +20,17 @@ def completion_resolve_model(inference_queue: InferenceQueue) -> Tuple[str, str]
                 return model, ""
 
     if completion_model not in have_models:
-        return "", f"model is not loaded (1)"
+        return "", "model is not loaded (1)"
 
     return completion_model, ""
 
 
 def static_resolve_model(model_name: str, inference_queue: InferenceQueue) -> Tuple[str, str]:
     # special case for longthink
-    if model_name in ["longthink", "gpt3.5", "gpt4"]:
+    if model_name in {"longthink", "gpt3.5", "gpt4"}:
         model_name = "longthink/stable"
         if model_name not in inference_queue.models_available():
-            return "", f"model is not loaded (2)"
+            return "", "model is not loaded (2)"
         return model_name, ""
 
     have_models: List[str] = [
@@ -43,7 +43,7 @@ def static_resolve_model(model_name: str, inference_queue: InferenceQueue) -> Tu
         return model_name, ""
 
     # CONTRASTcode is default model
-    if model_name in ["CONTRASTcode"]:
+    if model_name in {"CONTRASTcode"}:
         model_name = ""
 
     def _family(model: str) -> str:
@@ -53,4 +53,4 @@ def static_resolve_model(model_name: str, inference_queue: InferenceQueue) -> Tu
         if not model_name or _family(model_name) == _family(have_model):
             return have_model, ""
     else:
-        return "", f"model is not loaded (3)"
+        return "", "model is not loaded (3)"

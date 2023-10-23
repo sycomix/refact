@@ -53,7 +53,4 @@ class Block(nn.Module):
 
         output = residual + (attn_output + feed_forward_hidden_states)
 
-        if self.forward_single_output:
-            return output
-        else:
-            return output, present
+        return output if self.forward_single_output else (output, present)

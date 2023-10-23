@@ -12,8 +12,12 @@ __all__ = ["Ticket"]
 # TODO: why not uuid???
 def random_guid(n=12):
     random_chars = "0123456789" + "ABCDEFGHIJKLNMPQRSTUVWXYZ" + "ABCDEFGHIJKLNMPQRSTUVWXYZ".lower()
-    guid = "".join([random_chars[random.randint(0, len(random_chars)-1)] for _ in range(n)])
-    return guid
+    return "".join(
+        [
+            random_chars[random.randint(0, len(random_chars) - 1)]
+            for _ in range(n)
+        ]
+    )
 
 
 class Ticket:

@@ -285,7 +285,7 @@ class InferenceLegacy(InferenceBase):
             self._model = load_checkpoint_embeddings(self._model, self._model.cache_dir, self._model.model_name)
             self._lora_on = False
         elif not self._lora_on and on:
-            log("activating lora %s" % lora_checkpoint_dir)
+            log(f"activating lora {lora_checkpoint_dir}")
             self._model = load_finetune_checkpoint(self._model, lora_checkpoint_dir)
             self._lora_checkpoint_dir = lora_checkpoint_dir
             self._lora_on = True
@@ -293,7 +293,7 @@ class InferenceLegacy(InferenceBase):
             try:
                 self._model = load_finetune_checkpoint_only(self._model, lora_checkpoint_dir)
             except RuntimeError as e:
-                log("failed to quick load lora checkpoint: %s" % e)
+                log(f"failed to quick load lora checkpoint: {e}")
                 log("will try to remove lora and add again")
                 self._model = self._model.exclude_lora(self._model)
                 self._lora_checkpoint_dir = ""
@@ -302,7 +302,7 @@ class InferenceLegacy(InferenceBase):
                 self._lora_checkpoint_dir = lora_checkpoint_dir
                 self._lora_on = True
         if lora_checkpoint_dir:
-            log("using lora %s" % lora_checkpoint_dir)
+            log(f"using lora {lora_checkpoint_dir}")
 
     def lora_switch_according_to_config(self):
         if not os.path.exists(env.CONFIG_ACTIVE_LORA):
@@ -320,7 +320,7 @@ class InferenceLegacy(InferenceBase):
         # }
         # NOTE: lora only for 3b model now
         if self._model_name not in ["CONTRASTcode/3b/multi"]:
-            log("lora disabled for %s" % self._model_name)
+            log(f"lora disabled for {self._model_name}")
             self.lora_switch(lora_checkpoint_dir="")
             return
         if j["lora_mode"] not in ["specific", "latest-best"]:

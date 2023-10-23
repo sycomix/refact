@@ -45,7 +45,7 @@ def save_status_json(status_dict, status_string):
         os.rename(os.path.join(traces.context().path, "status.json.tmp"),
                   os.path.join(traces.context().path, "status.json"))
     except Exception as e:
-        traces.log("ERROR SAVING STATS: %s" % (e or str(type(e))))
+        traces.log(f"ERROR SAVING STATS: {e or str(type(e))}")
         traces.log("(no big deal, will try again next iteration)")
 
 
@@ -70,7 +70,7 @@ def load_finetune_config() -> Dict[str, Any]:
     cfg_builder = ConfigBuilder(base_config(env))
     user_cfg = {**finetune_train_defaults}
     if os.path.exists(env.CONFIG_FINETUNE):
-        traces.log("Reading %s" % env.CONFIG_FINETUNE)
+        traces.log(f"Reading {env.CONFIG_FINETUNE}")
         user_cfg.update(**json.load(open(env.CONFIG_FINETUNE)))
     if user_cfg['use_heuristics']:
         traces.log("Retrieving dataset length per epoch, it may take a while...")
@@ -121,9 +121,15 @@ def create_data(cfg, enc) -> Tuple[Any, Optional[Any]]:
     if not has_train_files:
         raise RuntimeError("No train files have been provided")
 
-    has_test_files = os.path.exists(os.path.join(env.DIR_UNPACKED, filtered_test)) \
-                     and len(list(jsonlines.open(os.path.join(env.DIR_UNPACKED, filtered_test)))) > 0
-    if has_test_files:
+    if (
+        has_test_files := os.path.exists(
+            os.path.join(env.DIR_UNPACKED, filtered_test)
+        )
+        and len(
+            list(jsonlines.open(os.path.join(env.DIR_UNPACKED, filtered_test)))
+        )
+        > 0
+    ):
         test_ds = finetune_datasource.local_sequence_plain_infill(filtered_test, test_dataopts)
         test_ds = list(test_ds)
     else:
@@ -240,7 +246,7 @@ def loop(
                 tag = "iter%04d-testloss%0.3f" % (iter_n, progress["test_loss"])
             else:
                 tag = "iter%04d-trainloss%0.3f" % (iter_n, progress["loss"])
-            traces.log("saving checkpoint %s" % tag)
+            traces.log(f"saving checkpoint {tag}")
             save_model_state(model, save_path=save_path, tag=tag)
         status_dict["worked_steps"] = iter_n
         status_dict["worked_minutes"] = int((time.time() - t0) / 60)
@@ -254,7 +260,7 @@ def loop(
 
 
 def finetune(status_dict):
-    logging.info("starting finetune at %s" % traces.context().path)
+    logging.info(f"starting finetune at {traces.context().path}")
     logging.info("STATUS finetune init")
     cfg = load_finetune_config()
     traces.log("creating model...")
@@ -296,7 +302,7 @@ def finetune(status_dict):
         test_ds=test_ds,
         status_dict=status_dict
     )
-    logging.info("finished finetune at %s" % traces.context().path)
+    logging.info(f"finished finetune at {traces.context().path}")
 
 
 def main():
@@ -324,10 +330,10 @@ def main():
         if "error" not in status_dict:  # if there is, a more detailed error is already in place
             t = str(e) or str(type(e))
             status_dict["error"] = t
-            traces.log("FAILED: %s" % t)
+            traces.log(f"FAILED: {t}")
             save_status_json(status_dict, "failed")
-        logging.error("FAILED finetune at %s" % traces.context().path)
-        logging.error("Error was: %s" % status_dict["error"])
+        logging.error(f"FAILED finetune at {traces.context().path}")
+        logging.error(f'Error was: {status_dict["error"]}')
         raise e
 
 

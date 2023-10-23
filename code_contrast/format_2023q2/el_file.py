@@ -21,12 +21,12 @@ class FileElement(Element):
         self.file_fn = file_fn
         self.file_lines = file_lines
         self.file_lines_toks: List[Optional[List[int]]] = []
-        self._footer_toks = list()
+        self._footer_toks = []
         self._lineheaders_dirty = True
         self._lineheaders_cnt_n = 0
         self._lineheaders_aux_n = 0
         self._toks_count_LINE = -1
-        self._expanding_ranges: List[_FileExpandingRange] = list()
+        self._expanding_ranges: List[_FileExpandingRange] = []
         self._cursor_token_at_line = -1
         self._lines_inspoints: Set[int] = set()
         self._lines_deleted: Set[int] = set()
@@ -99,11 +99,10 @@ class FileElement(Element):
                 # print("take aux line %i" % (l))
                 cx.filled_aux_n += len_t
                 take_line = True
-        else:
-            if cx.filled_ctx_n + len_t < cx.limit_ctx_n + (cx.limit_aux_n - cx.filled_aux_n) or mandatory or cx.for_training:
-                # print("take ctx line %i" % (l))
-                cx.filled_ctx_n += len_t
-                take_line = True
+        elif cx.filled_ctx_n + len_t < cx.limit_ctx_n + (cx.limit_aux_n - cx.filled_aux_n) or mandatory or cx.for_training:
+            # print("take ctx line %i" % (l))
+            cx.filled_ctx_n += len_t
+            take_line = True
         if not take_line:
             return False
         self.file_lines_toks[l] = t
@@ -118,11 +117,9 @@ class FileElement(Element):
             if er.aux != aux:
                 continue
             if er.works0:
-                # if er.line0expand - 1 > 0 and self.file_lines_toks[er.line0expand - 1] is not None:
-                #     print(" ! bumped into another expanding range er.line0expand - 1 = %d" % (er.line0expand - 1))
-                #     er.works0 = 0
-                success = self._lines2toks_helper(cx, er.line0expand - 1, aux=er.aux, mandatory=False)
-                if success:
+                if success := self._lines2toks_helper(
+                    cx, er.line0expand - 1, aux=er.aux, mandatory=False
+                ):
                     er.line0expand -= 1
                     if cx.for_training:
                         er.works0 -= 1    # Works as a counter up to a random number

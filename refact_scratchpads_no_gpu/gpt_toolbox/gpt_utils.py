@@ -7,7 +7,7 @@ from refact_scratchpads_no_gpu.gpt_toolbox.scratchpad_utils import full_line_sel
 
 
 def msg(role: str, content: str) -> Dict[str, str]:
-    assert role in ['system', 'user', 'assistant']
+    assert role in {'system', 'user', 'assistant'}
     return {'role': role, 'content': content}
 
 
@@ -21,8 +21,7 @@ def code_block_postprocess(txt: str) -> str:
         if is_code:
             lines_code.append(line)
 
-    code = '\n'.join(lines_code) or txt
-    return code
+    return '\n'.join(lines_code) or txt
 
 
 def find_substring_positions(substring, text) -> Optional[Tuple[int, int]]:

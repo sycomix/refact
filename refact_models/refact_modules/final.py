@@ -14,5 +14,4 @@ class Final(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_normed = self.ln(x)
-        logits = self.unemb(x_normed)
-        return logits
+        return self.unemb(x_normed)

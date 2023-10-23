@@ -26,11 +26,10 @@ class HumanEvalContinuation:
                 i = completion.find(stop)
                 assert i != -1
                 completion = completion[:i]
-        ret = {
+        return {
             "completion": completion,
             "tokens_with_completion": [int(t) for t in tokens_with_completion],
         }
-        return ret
 
     def __iter__(self):
         for ex in self.inner_filter:
@@ -81,11 +80,11 @@ class HumanEvalInfillPrompt:
         self.enc: RefactEncoding = dataopts.encoding
 
     def __iter__(self):
+        part2 = "\n\n"
         for ex in self.inner_filter:
             # dict_keys(['task_id', 'prompt', 'entry_point', 'canonical_solution', 'test', 'stats'])
             fn = ex["entry_point"] + ".py"
             part1 = ex["prompt"] + "    "
-            part2 = "\n\n"
             dest = ex["prompt"] + ex["canonical_solution"]
             odm = {
                 "orig": {fn: part1 + self.enc.decode([self.enc.INFILL]) + part2},
@@ -128,7 +127,7 @@ class HumanEvalInstructPrompt:
             odm = {
                 "orig": {fn: ex["prompt"].rstrip() + "\n    pass\n\n\n"},
                 "dest": {fn: dest},
-                "commitmsg": "Implement %s() function" % ex["entry_point"],
+                "commitmsg": f'Implement {ex["entry_point"]}() function',
                 "original_prompt": ex["prompt"].rstrip(),
                 "stats": ex["stats"],
             }

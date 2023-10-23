@@ -65,18 +65,18 @@ def find_required_packages(packages: Set[str]) -> Set[str]:
 
 
 setup_package = os.environ.get("SETUP_PACKAGE", None)
-if setup_package is not None:
-    if setup_package not in all_refact_packages:
-        raise ValueError(f"Package {setup_package} not found in repo")
+if setup_package is None:
+    setup_packages = all_refact_packages
+
+
+elif setup_package not in all_refact_packages:
+    raise ValueError(f"Package {setup_package} not found in repo")
+else:
     setup_packages = {
         name: py_package
         for name, py_package in all_refact_packages.items()
         if name in find_required_packages({setup_package})
     }
-else:
-    setup_packages = all_refact_packages
-
-
 setup(
     name="refact-self-hosting",
     version="0.9.0",

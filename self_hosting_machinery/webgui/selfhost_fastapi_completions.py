@@ -31,12 +31,12 @@ def red_time(base_ts):
 
 
 def chat_limit_messages(messages: List[Dict[str, str]]):
-    if len(messages) == 0:
+    if not messages:
         raise HTTPException(status_code=400, detail="No messages")
     while len(messages) > 10:
-        del messages[0:2]  # user, assistant
-    while sum([len(m["content"] + m["role"]) for m in messages]) > 4000:
-        del messages[0:2]  # user, assistant
+        del messages[:2]
+    while sum(len(m["content"] + m["role"]) for m in messages) > 4000:
+        del messages[:2]
     return messages
 
 
@@ -111,7 +111,7 @@ async def completion_streamer(ticket: Ticket, post: NlpCompletion, timeout, seen
             try:
                 msg = await asyncio.wait_for(ticket.streaming_queue.get(), timeout)
             except asyncio.TimeoutError:
-                log("TIMEOUT %s" % ticket.id())
+                log(f"TIMEOUT {ticket.id()}")
                 msg = {"status": "error", "human_readable_message": "timeout"}
             not_seen_resp = copy.deepcopy(msg)
             if "choices" in not_seen_resp:
@@ -130,7 +130,7 @@ async def completion_streamer(ticket: Ticket, post: NlpCompletion, timeout, seen
                     continue
                 yield json.dumps(not_seen_resp)
                 break
-            yield "data: " + json.dumps(not_seen_resp) + "\n\n"
+            yield f"data: {json.dumps(not_seen_resp)}" + "\n\n"
             packets_cnt += 1
             if msg.get("status", "") != "in_progress":
                 break
@@ -138,14 +138,14 @@ async def completion_streamer(ticket: Ticket, post: NlpCompletion, timeout, seen
             yield "data: [DONE]" + "\n\n"
         log(red_time(created_ts) + " /finished %s, streamed %i packets" % (ticket.id(), packets_cnt))
         ticket.done()
-        # fastapi_stats.stats_accum[kt] += msg.get("generated_tokens_n", 0)
-        # fastapi_stats.stats_accum[kcomp] += 1
-        # fastapi_stats.stats_lists_accum["stat_latency_" + post.model].append(time.time() - created_ts)
+            # fastapi_stats.stats_accum[kt] += msg.get("generated_tokens_n", 0)
+            # fastapi_stats.stats_accum[kcomp] += 1
+            # fastapi_stats.stats_lists_accum["stat_latency_" + post.model].append(time.time() - created_ts)
     finally:
         if ticket.id() is not None:
-            log("   ***  CANCEL  ***  cancelling %s " % ticket.id() + red_time(created_ts))
-            # fastapi_stats.stats_accum["stat_api_cancelled"] += 1
-            # fastapi_stats.stats_accum["stat_m_" + post.model + "_cancelled"] += 1
+            log(f"   ***  CANCEL  ***  cancelling {ticket.id()} {red_time(created_ts)}")
+                    # fastapi_stats.stats_accum["stat_api_cancelled"] += 1
+                    # fastapi_stats.stats_accum["stat_m_" + post.model + "_cancelled"] += 1
         ticket.cancelled = True
 
 
@@ -155,7 +155,7 @@ async def diff_streamer(ticket: Ticket, post: DiffCompletion, timeout, created_t
             try:
                 msg = await asyncio.wait_for(ticket.streaming_queue.get(), timeout)
             except asyncio.TimeoutError:
-                log("TIMEOUT %s" % ticket.id())
+                log(f"TIMEOUT {ticket.id()}")
                 msg = {"status": "error", "human_readable_message": "timeout"}
             if not post.stream:
                 if msg.get("status", "") == "in_progress":
@@ -163,22 +163,25 @@ async def diff_streamer(ticket: Ticket, post: DiffCompletion, timeout, created_t
                 yield json.dumps(msg)
                 break
             tmp = json.dumps(msg)
-            yield "data: " + tmp + "\n\n"
-            log("  " + red_time(created_ts) + " stream %s <- %i bytes" % (ticket.id(), len(tmp)))
+            yield f"data: {tmp}" + "\n\n"
+            log(
+                f"  {red_time(created_ts)}"
+                + " stream %s <- %i bytes" % (ticket.id(), len(tmp))
+            )
             if msg.get("status", "") != "in_progress":
                 break
         if post.stream:
             yield "data: [DONE]" + "\n\n"
-        log(red_time(created_ts) + " /finished call %s" % ticket.id())
+        log(f"{red_time(created_ts)} /finished call {ticket.id()}")
         ticket.done()
-        # fastapi_stats.stats_accum[kt] += msg.get("generated_tokens_n", 0)
-        # fastapi_stats.stats_accum[kcomp] += 1
-        # fastapi_stats.stats_lists_accum["stat_latency_" + post.model].append(time.time() - created_ts)
+            # fastapi_stats.stats_accum[kt] += msg.get("generated_tokens_n", 0)
+            # fastapi_stats.stats_accum[kcomp] += 1
+            # fastapi_stats.stats_lists_accum["stat_latency_" + post.model].append(time.time() - created_ts)
     finally:
         if ticket.id() is not None:
-            log("   ***  CANCEL  ***  cancelling %s " % ticket.id() + red_time(created_ts))
-            # fastapi_stats.stats_accum["stat_api_cancelled"] += 1
-            # fastapi_stats.stats_accum["stat_m_" + post.model + "_cancelled"] += 1
+            log(f"   ***  CANCEL  ***  cancelling {ticket.id()} {red_time(created_ts)}")
+                    # fastapi_stats.stats_accum["stat_api_cancelled"] += 1
+                    # fastapi_stats.stats_accum["stat_m_" + post.model + "_cancelled"] += 1
         ticket.cancelled = True
         ticket.done()
 
@@ -190,7 +193,7 @@ async def chat_streamer(ticket: Ticket, timeout, created_ts):
             try:
                 msg: Dict = await asyncio.wait_for(ticket.streaming_queue.get(), timeout)
             except asyncio.TimeoutError:
-                log("TIMEOUT %s" % ticket.id())
+                log(f"TIMEOUT {ticket.id()}")
                 msg = {"status": "error", "human_readable_message": "timeout"}
             if "choices" in msg:
                 for ch in msg["choices"]:
@@ -202,17 +205,20 @@ async def chat_streamer(ticket: Ticket, timeout, created_ts):
                     if "content" in ch:
                         del ch["content"]
             tmp = json.dumps(msg)
-            yield "data: " + tmp + "\n\n"
-            log("  " + red_time(created_ts) + " stream %s <- %i bytes" % (ticket.id(), len(tmp)))
+            yield f"data: {tmp}" + "\n\n"
+            log(
+                f"  {red_time(created_ts)}"
+                + " stream %s <- %i bytes" % (ticket.id(), len(tmp))
+            )
             if msg.get("status", "") != "in_progress":
                 break
         await asyncio.sleep(0.5)   # a workaround for VS Code plugin bug, remove July 20, 2023 when plugin should be fixed
         yield "data: [DONE]" + "\n\n"
-        log(red_time(created_ts) + " /finished call %s" % ticket.id())
+        log(f"{red_time(created_ts)} /finished call {ticket.id()}")
         ticket.done()
     finally:
         if ticket.id() is not None:
-            log("   ***  CANCEL  ***  cancelling %s" % ticket.id() + red_time(created_ts))
+            log(f"   ***  CANCEL  ***  cancelling {ticket.id()}{red_time(created_ts)}")
         ticket.cancelled = True
         ticket.done()
 
@@ -221,7 +227,10 @@ async def error_string_streamer(ticket_id, static_message, account, created_ts):
     yield "data: " + json.dumps(
         {"object": "smc.chat.chunk", "role": "assistant", "delta": static_message, "finish_reason": "END"}) + "\n\n"
     yield "data: [ERROR]" + "\n\n"
-    log("  " + red_time(created_ts) + "%s chat static message to %s: %s" % (ticket_id, account, static_message))
+    log(
+        f"  {red_time(created_ts)}"
+        + f"{ticket_id} chat static message to {account}: {static_message}"
+    )
 
 
 class CompletionsRouter(APIRouter):
@@ -250,11 +259,13 @@ class CompletionsRouter(APIRouter):
             },
             **models_mini_db,
         }
-        filter_caps = set([
+        filter_caps = {
             capability
             for model in self._inference_queue.models_available()
-            for capability in models_mini_db_extended.get(model, {}).get("filter_caps", [])
-        ])
+            for capability in models_mini_db_extended.get(model, {}).get(
+                "filter_caps", []
+            )
+        }
         for rec in modelcap_records.db:
             rec_modelcaps = rec.model if isinstance(rec.model, list) else [rec.model]
             rec_third_parties = rec.third_party if isinstance(rec.third_party, list) else [rec.third_party]
@@ -324,7 +335,10 @@ class CompletionsRouter(APIRouter):
         account = "XXX"
         if post.function != "diff-anywhere":
             if post.cursor_file not in post.sources:
-                raise HTTPException(status_code=400, detail="cursor_file='%s' is not in sources=%s" % (post.cursor_file, list(post.sources.keys())))
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"cursor_file='{post.cursor_file}' is not in sources={list(post.sources.keys())}",
+                )
             if post.cursor0 < 0 or post.cursor1 < 0:
                 raise HTTPException(status_code=400, detail="cursor0=%d or cursor1=%d is negative" % (post.cursor0, post.cursor1))
             filetext = post.sources[post.cursor_file]

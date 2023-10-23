@@ -30,7 +30,7 @@ class Unpacker:
                 continue
             file: FileElement = potential_file
             # maybe file.file_fn similar to external_file_name?
-            if len(todel) > 0 and (external_file_name == "" or external_file_name == file.file_fn):
+            if todel != "" and external_file_name in ["", file.file_fn]:
                 cursor = 0
                 while 1:
                     i = file._file_lookup_helper_string.find(todel, cursor)
@@ -46,7 +46,7 @@ class Unpacker:
                     if len(lst) == up_to_matches:
                         break
                     cursor = i + 1
-            if len(todel) == 0 and external_file_name == file.file_fn:
+            if not todel and external_file_name == file.file_fn:
                 lst.append((file, external_line_n, 0))
         lst.sort(key=lambda x: x[2])
         return lst
@@ -61,15 +61,13 @@ class Unpacker:
                 toks_after = len(self.cx.tokens)
                 assert toks_after <= toks_before
                 self._position += toks_before - toks_after
-                # print("+2++++ ", self.cx.tokens)
-                if finished:
-                    el = self._constructing
-                    el.unpack_finish(self.cx)
-                    self._constructing = None
-                    self.result.append(el)
-                else:
+                if not finished:
                     # print("over")
                     break
+                el = self._constructing
+                el.unpack_finish(self.cx)
+                self._constructing = None
+                self.result.append(el)
             if self._constructing is None:
                 for klass, seq in self.fmt.element_start_seq.items():
                     l = len(seq)

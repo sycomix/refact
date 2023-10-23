@@ -64,7 +64,7 @@ class RefactModel(nn.Module, LoraMixin):
         if past_key_values is None:
             past_key_values = tuple([None] * len(self.layers))
 
-        for i, (block, layer_past) in enumerate(zip(self.layers, past_key_values)):
+        for block, layer_past in zip(self.layers, past_key_values):
             hidden_states, present = block(hidden_states=hidden_states,
                                            attention_mask=attention_mask,
                                            layer_past=layer_past,

@@ -60,10 +60,10 @@ class UntokenizeState:
         self.state = WAIT
         self.c = 0
         self.brewing_edit: Edit = Edit("", 0, -1, [], [])
-        self.fn_tokens = list()
+        self.fn_tokens = []
         self.fn_txt = ""
-        self.body_tokens = list()
-        self.msg_tokens = list()
+        self.body_tokens = []
+        self.msg_tokens = []
         self.eot = False
         self.stats = {
             "chunks_applied": 0,
@@ -85,13 +85,13 @@ class ContrastDiff:
         self.orig_withpos: Dict[str, List[int]] = dict()
         self.dest_tokens: Dict[str, List[int]] = dict()
         self.commitmsg: str = ""
-        self.edits: List[Edit] = list()
+        self.edits: List[Edit] = []
         self.fn2tind: DefaultDict[str, List[int]] = defaultdict(list)
         self.fn2tstart: Dict[str, int] = dict()
         self.fn2cut0: Dict[str, int] = dict()
-        self.r: List[int] = list()
-        self.m: List[int] = list()
-        self.errors: List[str] = list()
+        self.r: List[int] = []
+        self.m: List[int] = []
+        self.errors: List[str] = []
         self.tokens_without_shortening = -1
         self.offset_commitmsg = -1
         self.offset_code_start = -1
@@ -135,7 +135,7 @@ class ContrastDiff:
             # dest_lines = odm["dest"][fn].replace('\r\n', '\n').replace('\r', '\n').splitlines()
             orig_lines = [x+"\n" for x in odm["orig"][fn].splitlines()]
             dest_lines = [x+"\n" for x in odm["dest"][fn].splitlines()]
-            if len(orig_lines)==0:
+            if not orig_lines:
                 orig_lines.append("\n")
             if orig_lines[-1][-1] != "\n":
                 orig_lines[-1] += "\n"
@@ -179,6 +179,7 @@ class ContrastDiff:
                 orig_all_tokens.extend(tmp)
                 block_orig_t.extend(tmp)
                 return tmp
+
             for tag, i1, i2, j1, j2 in fndiff:
                 block_orig_t = []
                 block_dest_t = []
@@ -229,7 +230,7 @@ class ContrastDiff:
             self.orig_tokens[fn] = orig_all_tokens
             self.dest_tokens[fn] = dest_all_tokens
         random.shuffle(opblocks)
-        raw_ops: List[Tuple[str, str, int, int, int, int]] = list()
+        raw_ops: List[Tuple[str, str, int, int, int, int]] = []
         for opblock in opblocks:
             raw_ops.extend(opblock)
         commitmsg_tokens = [self.enc.MSG] + self.enc.encode(" " + odm["commitmsg"])
@@ -272,7 +273,7 @@ class ContrastDiff:
                     i2=written_i2 + starts,
                 ))
             self.file_deltokens = defaultdict(list)
-            for fn in file_deltokens.keys():
+            for fn in file_deltokens:
                 cut = self.fn2cut[fn]
                 starts = self.fn2tstart[fn]
                 tinds = self.fn2tind[fn]
@@ -282,14 +283,14 @@ class ContrastDiff:
                     self.file_deltokens[fn].append((written_i1 + starts, written_i2 + starts))
             self.file_dellines = defaultdict(list)
             self.file_contlines = defaultdict(list)
-            for fn in file_dellines.keys():
+            for fn in file_dellines:
                 cut = self.fn2cut[fn]
                 starts = self.fn2tstart[fn]
                 tinds = self.fn2tind[fn]
                 # orig_t = self.orig_tokens[fn][cut:]
                 for ti in file_dellines[fn]:
                     if (ti - cut) not in tinds:
-                        print("file_dellines[%s]" % fn, file_dellines[fn])
+                        print(f"file_dellines[{fn}]", file_dellines[fn])
                         print("orig_tokens[fn]", len(self.enc.decode(self.orig_tokens[fn])))
                         print("tinds", len(tinds))
                         print("poi", file_poi[fn])
@@ -393,7 +394,11 @@ class ContrastDiff:
                 move_r2 = 0
                 if tight_shrink:
                     if is_file_supplimentary:
-                        relaxable_supp_files_cnt = sum([1 for fn in files[:-1] if relax1[fn] > 0 or relax2[fn] > 0])
+                        relaxable_supp_files_cnt = sum(
+                            1
+                            for fn in files[:-1]
+                            if relax1[fn] > 0 or relax2[fn] > 0
+                        )
                         relaxable_supp_files_cnt = max(1, relaxable_supp_files_cnt)
                         cut_step = 1 + need_to_cut_supp // relaxable_supp_files_cnt // 3
                     else:
@@ -424,7 +429,11 @@ class ContrastDiff:
             for i, fn in enumerate(files):
                 is_file_supplimentary = (i != len(files)-1)
                 orig_t = self.orig_tokens[fn]
-                t = [self.enc.FILE] + self.enc.encode(" " + fn + ":%i" % r1[fn]) + [self.enc.ESCAPE]
+                t = (
+                    [self.enc.FILE]
+                    + self.enc.encode(f" {fn}" + ":%i" % r1[fn])
+                    + [self.enc.ESCAPE]
+                )
                 self.r.extend(t)
                 self.m.extend([0]*len(t))
                 if SHRINK_DUMP:
@@ -446,7 +455,7 @@ class ContrastDiff:
                 self.tokens_without_shortening = len(self.r)
             else:
                 generate_edits()
-            # print("%s tpos_unused %i/%i" % (pas, len(tpos_unused) - len(self.enc.tpos), len(self.enc.tpos)))
+                # print("%s tpos_unused %i/%i" % (pas, len(tpos_unused) - len(self.enc.tpos), len(self.enc.tpos)))
         assert len(self.m) == len(self.r)
         self.code_m = self.m
         if not contrast_unmask_orig:
@@ -529,8 +538,7 @@ class ContrastDiff:
         assert len(self.orig_tokens) == 0
         assert len(self.orig_withpos) == 0
         self.full_orig_tokens = full_orig_tokens
-        us = UntokenizeState()   #orig_tokens, self.orig_withpos)
-        return us
+        return UntokenizeState()
 
     def untokenize_finish_state(self, us: UntokenizeState, c: int):
         if us.state in [WAIT, FILENAME_DIAMONDS, DEL, SHIFT, CHUNK]:

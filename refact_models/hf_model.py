@@ -30,11 +30,7 @@ class HFModel(nn.Module, LoraMixin):
         self.model_name: str = model_name
 
     @classmethod
-    def from_pretrained(self,
-                        path: str,
-                        device: str = "cuda",
-                        cache_dir: Optional[str] = None,
-                        **unused):
+    def from_pretrained(cls, path: str, device: str = "cuda", cache_dir: Optional[str] = None, **unused):
         return HFModel(path, device, cache_dir=cache_dir)
 
     def forward(self, x, past_key_values: Optional = None, **unused):

@@ -64,7 +64,7 @@ class CodifyModel(nn.Module, LoraMixin):
         if past_key_values is None:
             past_key_values = tuple([None] * len(self.blocks))
 
-        for i, (block, layer_past) in enumerate(zip(self.blocks, past_key_values)):
+        for block, layer_past in zip(self.blocks, past_key_values):
             hidden_states, present = block(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -78,8 +78,7 @@ class CodifyModel(nn.Module, LoraMixin):
     def lm_forward(self, hidden_states):
         hidden_states_normed = self.ln_f(hidden_states)
         hidden_states_norm = hidden_states_normed / 2.0
-        logits = self.lm_head(hidden_states_norm)
-        return logits
+        return self.lm_head(hidden_states_norm)
 
     def forward_train_cp(self, x: torch.Tensor) -> torch.Tensor:
         from torch.utils.checkpoint import checkpoint_sequential
@@ -87,9 +86,9 @@ class CodifyModel(nn.Module, LoraMixin):
         hidden_states = self.wte(x)
         with BlockCheckpointing(self.blocks):
             hidden_states = checkpoint_sequential(self.blocks, len(self.blocks), hidden_states.requires_grad_(True))
-        logits = torch.utils.checkpoint.checkpoint(self.lm_forward, hidden_states.requires_grad_(True))
-
-        return logits
+        return torch.utils.checkpoint.checkpoint(
+            self.lm_forward, hidden_states.requires_grad_(True)
+        )
 
     def highlight_forward(self, x_bte, first_bt, diffhlpoint):
         B, T, E = x_bte.shape

@@ -68,22 +68,18 @@ class JsonlFilesReaderCached:
                 stats["restart%02d" % self.cold_restart_key] = position
                 os.makedirs(os.path.dirname(cached_fn), exist_ok=True)
                 os.umask(0o002)
-                with filelock.FileLock(cached_fn + ".lock"):
-                    if os.path.exists(cached_fn):
-                        pass
-                        # This is useful to understand which files are being processed:
-                        #log("using cached '%s'" % cached_fn)
-                    else:
-                        log("downloading '%s' from '%s'" % (cached_fn, self.cloud_path + fn))
-                        bf.copy(self.cloud_path + fn, cached_fn + ".tmp")
-                        os.rename(cached_fn + ".tmp", cached_fn)
+                with filelock.FileLock(f"{cached_fn}.lock"):
+                    if not os.path.exists(cached_fn):
+                        log(f"downloading '{cached_fn}' from '{self.cloud_path + fn}'")
+                        bf.copy(self.cloud_path + fn, f"{cached_fn}.tmp")
+                        os.rename(f"{cached_fn}.tmp", cached_fn)
                 if fn.endswith(".gz"):
                     it = gzip.open(cached_fn)
                 elif fn.endswith(".zst"):
                     def bin2str(buffer_bytes):
                         cctx = zstandard.ZstdDecompressor()
                         with open(cached_fn, "rb") as reader, \
-                                cctx.stream_reader(reader) as decompressor:
+                                    cctx.stream_reader(reader) as decompressor:
                             buffer = b""
                             while True:
                                 data = decompressor.read(buffer_bytes)
@@ -244,7 +240,7 @@ class Packer:
         self.keys = keys
 
     def __iter__(self):
-        accum = {k: list() for k in self.keys}
+        accum = {k: [] for k in self.keys}
         stats: Dict[str, int] = {
             "packed_in": 0,
             "packed_out": 0,
@@ -257,10 +253,7 @@ class Packer:
             stats["pusher_resmem"] = psutil.Process().memory_info().rss / 1e9
             last_rec_stats.update(stats)
             accum_cut = {k: v[:self.n_ctx] for k, v in accum.items()}
-            emit = {
-                "stats": {**last_rec_stats, **stats},
-                **accum_cut,
-            }
+            emit = {"stats": last_rec_stats | stats, **accum_cut}
             if self.pack_pad0:
                 for k in self.keys:
                     if k=="tokens":
@@ -269,6 +262,7 @@ class Packer:
                         emit[k].extend([0]*(self.n_ctx - len(emit[k])))
             accum = {k: accum[k][self.n_ctx:] for k in self.keys}
             return emit
+
         packed_n = 0
         for rec in self.inner_filter:
             if sum(rec["mask"]) < 5:
@@ -349,11 +343,9 @@ class Shuffle:
         for rec in self.inner_filter:
             buf.append(rec)
             if len(buf) >= self.shuffle_depth:
-                t = buf.pop(self.random_state.randrange(len(buf)))
-                yield t
+                yield buf.pop(self.random_state.randrange(len(buf)))
         while len(buf):
-            t = buf.pop(self.random_state.randrange(len(buf)))
-            yield t
+            yield buf.pop(self.random_state.randrange(len(buf)))
 
 
 class Mix:
@@ -389,7 +381,7 @@ def build_filter_stack(
 ):
     dataopts.set_encoding(enc)
     if isinstance(datadef, DatasetMix):
-        if len(cold_restart) == 0:
+        if not cold_restart:
             cold_restart = [0]*comm.size*len(datadef.dataset_defs)
         sources = []
         for i, dsdef in enumerate(datadef.dataset_defs):
@@ -397,7 +389,7 @@ def build_filter_stack(
             src = build_filter_stack(dsdef, dataopts, enc, comm, cold_restart, cold_restart_offset, skip_assert_flag=True)
             sources.append(src)
         return Mix(sources, datadef.proportions)
-    if len(cold_restart) == 0:
+    if not cold_restart:
         cold_restart = [0]*comm.size
     path = datadef.cloud_path
     files_len = len(datadef.cloud_files)
@@ -433,9 +425,9 @@ def build_filter_stack(
         elif ds and not isinstance(filt, str):
             ds = filt(ds, dataopts)
         else:
-            assert 0, "cannot apply filter '%s'" % filt
+            assert 0, f"cannot apply filter '{filt}'"
         # log("dataset '%s' filter %s" % (path, ("'%s'" % filt) if isinstance(filt, str) else filt.__name__))
-        log("dataset '%s' filter %s" % (path, ds.__class__.__name__))
+        log(f"dataset '{path}' filter {ds.__class__.__name__}")
     if not skip_assert_flag:
         dataopts.assert_all_used()
     return ds

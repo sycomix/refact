@@ -8,8 +8,7 @@ from typing import Dict, Any
 def modload(import_str):
     import_mod, import_class = import_str.rsplit(":", 1)
     model = importlib.import_module(import_mod)
-    Class = getattr(model, import_class, None)
-    return Class
+    return getattr(model, import_class, None)
 
 
 class InferenceBase:

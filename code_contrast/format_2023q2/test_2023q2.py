@@ -46,8 +46,12 @@ def test_messages(fmt: Format2023q2):
     for t in pack.r:
         u2.feed_tokens([t])   # feed one by one
     for i in range(len(u2.result)):
-        assert repr(u2.result[i]) == repr(u1.result[i]), "%s != %s" % (repr(u2.result[i]), repr(u1.result[i]))
-        assert repr(u2.result[i]) == repr(orig_plan[i]), "%s != %s" % (repr(u2.result[i]), repr(orig_plan[i]))
+        assert repr(u2.result[i]) == repr(
+            u1.result[i]
+        ), f"{repr(u2.result[i])} != {repr(u1.result[i])}"
+        assert repr(u2.result[i]) == repr(
+            orig_plan[i]
+        ), f"{repr(u2.result[i])} != {repr(orig_plan[i])}"
     print("test_messages PASSED")
 
 
@@ -202,8 +206,8 @@ def self_test(
     ):
         if verbose:
             print(e0)
-        assert repr(e0) == repr(e1), " != %s" % (repr(e1))
-        assert repr(e0) == repr(e2), " != %s" % (repr(e2))
+        assert repr(e0) == repr(e1), f" != {repr(e1)}"
+        assert repr(e0) == repr(e2), f" != {repr(e2)}"
     code = el_chunk.apply_chunks(u1.result)
     for fn, dest in odm["dest"].items():
         dest = "\n".join(dest.splitlines())

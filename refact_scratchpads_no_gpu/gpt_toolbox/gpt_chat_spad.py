@@ -27,8 +27,7 @@ def gpt_prices(  # Apr 4 2023:
 
 @functools.lru_cache(maxsize=10)
 def engine_to_encoding(engine: str) -> tiktoken.Encoding:
-    enc = tiktoken.encoding_for_model(engine)
-    return enc
+    return tiktoken.encoding_for_model(engine)
 
 
 ACCUMULATE_N_STREAMING_CHUNKS = 5
@@ -144,18 +143,17 @@ class GptChat(ascratch.AsyncScratchpad):
     def toplevel_fields(self):
         if not self.finish_reason:
             return {}
-        else:
-            calc_prompt_tokens_n, calc_generated_tokens_n = calculate_chat_tokens(
-                self._model_name, self._messages, self._completion
-            )
-            self.metering_prompt_tokens_n = calc_prompt_tokens_n
-            self.metering_generated_tokens_n = calc_generated_tokens_n
-            metering_message = {
-                "metering_prompt_tokens_n": self.metering_prompt_tokens_n,
-                "metering_generated_tokens_n": self.metering_generated_tokens_n,
-                "pp1000t_prompt": self.prices[0],
-                "pp1000t_generated": self.prices[1],
-                "model_name": self._model_name,
-            }
-            self.debuglog(json.dumps(metering_message))
-            return metering_message
+        calc_prompt_tokens_n, calc_generated_tokens_n = calculate_chat_tokens(
+            self._model_name, self._messages, self._completion
+        )
+        self.metering_prompt_tokens_n = calc_prompt_tokens_n
+        self.metering_generated_tokens_n = calc_generated_tokens_n
+        metering_message = {
+            "metering_prompt_tokens_n": self.metering_prompt_tokens_n,
+            "metering_generated_tokens_n": self.metering_generated_tokens_n,
+            "pp1000t_prompt": self.prices[0],
+            "pp1000t_generated": self.prices[1],
+            "model_name": self._model_name,
+        }
+        self.debuglog(json.dumps(metering_message))
+        return metering_message
